@@ -1,0 +1,17 @@
+digraph {
+	1966370122896 [label="while: low <= high"]
+	1966368536848 [label="action: mid = low + (high - low) // 2"]
+	1966370122896 -> 1966368536848 [label="left (body)" color=blue]
+	1966368535504 [label="condition: if arr[mid] == x"]
+	1966368536848 -> 1966368535504 [label=next color=orange]
+	1966368274640 [label="action: return mid"]
+	1966368535504 -> 1966368274640 [label="left (body)" color=blue]
+	1966368536912 [label="condition: if arr[mid] < x"]
+	1966368535504 -> 1966368536912 [label="right (else)" color=green]
+	1966365742864 [label="action: low = mid + 1"]
+	1966368536912 -> 1966365742864 [label="left (body)" color=blue]
+	1966368536976 [label="action: else high = mid - 1"]
+	1966368536912 -> 1966368536976 [label=right color=green]
+	1966370352656 [label="action: return -1"]
+	1966370122896 -> 1966370352656 [label=next color=orange]
+}
