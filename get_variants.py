@@ -1,19 +1,16 @@
-import numpy as np
 import inspect
 from utils import middle_to_end_alternating_traversal, middle_divide_conquer_traversal
 from itertools import product
 
-a_values = range(1, 4)  # [1, 2, ..., 10]
+a_values = range(1, 4)
 b_values = range(1, 4)
-c_values = range(1, 4)  # New coefficient for x inside abs
-d_values = range(1, 4)  # New coefficient for y inside abs
-alpha_values = [0.5, 1.0, 1.5] # Coefficient for the abs term
-scaling_factors = [0.3, 0.5, 0.7] #[i / 10 for i in range(1, 11)]  [0.1, 0.2, ..., 1]
-
+c_values = range(1, 4)
+d_values = range(1, 4)
+alpha_values = [-0.5, 0.5, 1.0]  # Coefficient for the abs term
+scaling_factors = [0.75, 1.0,1.5]  # Scaling factors
 
 def min_function(x, y, a, b, c, d, alpha, scaling_factor):
     return scaling_factor * (a * x + b * y - alpha * abs(c * x - d * y))
-
 
 def max_function(x, y, a, b, c, d, alpha, scaling_factor):
     return scaling_factor * (a * x + b * y + alpha * abs(c * x - d * y))
@@ -35,6 +32,16 @@ def print_algorithm_code(algorithm):
         print(f"Error retrieving source code: {e}")
 
 
+def normalize_parameters(params):
+    """Normalize parameters to eliminate duplicates by scaling appropriately"""
+    a, b, c, d, alpha, scale = params
+    # Normalize all parameters
+    a_norm = a * scale
+    b_norm = b * scale
+    c_norm = c * alpha * scale
+    d_norm = d * alpha * scale
+    return (a_norm, b_norm, c_norm, d_norm)
+
 def get_variation_algorithms():
     algorithms = []
 
@@ -52,8 +59,8 @@ def get_variation_algorithms():
         a_values, b_values, c_values, d_values,
         alpha_values, scaling_factors
     ))
-
     def create_variant(loop_behavior, params_min, params_max):
+        # Original parameters for display/debugging
         a_min, b_min, c_min, d_min, alpha_min, scale_min = params_min
         a_max, b_max, c_max, d_max, alpha_max, scale_max = params_max
 
@@ -75,12 +82,11 @@ def get_variation_algorithms():
                 # Find the furthest reachable segment satisfying conditions
                 progress = False  # Track if `k` increases
                 while k <= n:
+                    # Use normalized parameters with simplified functions
                     new_U_min = min_function(U_min, U[k - 1],
-                                             a_min, b_min, c_min, d_min,
-                                             alpha_min, scale_min)
+                                                        a_min, b_min, c_min, d_min,alpha_min, scale_min)
                     new_L_max = max_function(L_max, L[k - 1],
-                                             a_max, b_max, c_max, d_max,
-                                             alpha_max, scale_max)
+                                                        a_max, b_max, c_max, d_max, alpha_max, scale_max)
 
                     if new_U_min >= new_L_max and U[i] >= new_L_max and L[i] <= new_U_min:
                         U_min = new_U_min
@@ -105,7 +111,7 @@ def get_variation_algorithms():
             return optimal_pc_fx, optimal_num_pieces, given_num_pieces
 
         variant.loop_behavior = loop_behavior
-        # Store all parameters for debugging/analysis
+        # Store original parameters for debugging/analysis
         variant.a_min, variant.b_min = a_min, b_min
         variant.c_min, variant.d_min = c_min, d_min
         variant.alpha_min = alpha_min
@@ -116,8 +122,31 @@ def get_variation_algorithms():
         variant.scale_max = scale_max
         return variant
 
+    # Track unique normalized parameter sets
+    unique_param_variants = {}
+
+    # First pass: identify unique parameter sets after normalization
+    for params in param_combinations:
+        # Normalize parameters
+        norm_params = normalize_parameters(params)
+        param_key = tuple(round(x, 2) for x in norm_params)
+
+        # Store original params with their normalized version
+        if param_key not in unique_param_variants:
+            unique_param_variants[param_key] = params
+
+    unique_params_list = list(unique_param_variants.values())
+    total_count = len(loop_variations)*len(param_combinations)*len(param_combinations)
+    unique_count = len(loop_variations)*len(unique_params_list) * len(unique_params_list)
+    print(f"Original number of variants: {total_count}")
+    print(f"Unique variants after normalization: {unique_count}")
+    print(
+        f"Eliminated {total_count - unique_count} duplicates ({(total_count - unique_count) / total_count * 100:.2f}%)")
+
+    # Second pass: generate algorithms using all combinations of unique parameter sets
     for loop_behavior in loop_variations:
-        for params_min in param_combinations:
-            for params_max in param_combinations:
+        for params_min in unique_params_list:
+            for params_max in unique_params_list:
                 algorithms.append(create_variant(loop_behavior, params_min, params_max))
+
     return algorithms
