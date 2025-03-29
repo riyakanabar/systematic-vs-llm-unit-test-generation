@@ -26,10 +26,11 @@ def run_test_case(algorithm, pc_cons_fx, epsilon):
 class AlgorithmFunctionalityTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        print("Setting up test cases and algorithms...")
+        print("Setting up algorithms...")
         cls.algorithms = get_variation_algorithms()
         print(f"Generated {len(cls.algorithms)} algorithm variants.")
         cls.original_algorithm = staticmethod(approximate_pc_cons_fx)
+        print("Setting up tests...")
         cls.test_cases = test_cases
         cls.valid_variants = list(range(0, len(cls.algorithms)))  # Start with all variants as valid (excluding original)
 
