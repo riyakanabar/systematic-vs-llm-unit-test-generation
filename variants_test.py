@@ -6,6 +6,7 @@ import numpy as np
 import multiprocessing
 from functools import partial
 import time
+from tqdm import tqdm
 
 
 def is_within_epsilon(pc_cons_fx, optimal_pc_fx, epsilon):
@@ -90,16 +91,12 @@ class AlgorithmFunctionalityTests(unittest.TestCase):
                 # Use a smaller chunksize for better load balancing
                 chunksize = max(1, len(tasks) // (self.num_processes * 4))
 
-                # Process results as they come in
-                for i, result in enumerate(pool.starmap(test_func, tasks, chunksize=chunksize)):
-                    if result is not None:  # Variant passed
-                        valid_variants.append(result)
-
-                    # Print progress occasionally
-                    if (i + 1) % 25000 == 0 or i + 1 == len(tasks):
-                        elapsed = time.time() - start_time
-                        print(
-                            f"Progress: {i + 1}/{len(tasks)} variants processed ({(i + 1) / len(tasks) * 100:.1f}%) in {elapsed:.2f} seconds")
+                # Process results as they come in with tqdm progress bar
+                with tqdm(total=len(tasks), desc="Test 1: Number of Pieces", unit="variant") as pbar:
+                    for i, result in enumerate(pool.starmap(test_func, tasks, chunksize=chunksize)):
+                        if result is not None:  # Variant passed
+                            valid_variants.append(result)
+                        pbar.update(1)
         except Exception as e:
             print(f"Error during parallel processing: {type(e).__name__}: {e}")
 
@@ -126,16 +123,12 @@ class AlgorithmFunctionalityTests(unittest.TestCase):
                 # Use a smaller chunksize for better load balancing
                 chunksize = max(1, len(tasks) // (self.num_processes * 4))
 
-                # Process results as they come in
-                for i, result in enumerate(pool.starmap(test_func, tasks, chunksize=chunksize)):
-                    if result is not None:  # Variant passed
-                        valid_variants.append(result)
-
-                    # Print progress occasionally
-                    if (i + 1) % 25000 == 0 or i + 1 == len(tasks):
-                        elapsed = time.time() - start_time
-                        print(
-                            f"Progress: {i + 1}/{len(tasks)} variants processed ({(i + 1) / len(tasks) * 100:.1f}%) in {elapsed:.2f} seconds")
+                # Process results as they come in with tqdm progress bar
+                with tqdm(total=len(tasks), desc="Test 2: Epsilon Difference", unit="variant") as pbar:
+                    for i, result in enumerate(pool.starmap(test_func, tasks, chunksize=chunksize)):
+                        if result is not None:  # Variant passed
+                            valid_variants.append(result)
+                        pbar.update(1)
         except Exception as e:
             print(f"Error during parallel processing: {type(e).__name__}: {e}")
 
@@ -160,17 +153,14 @@ class AlgorithmFunctionalityTests(unittest.TestCase):
                 # Use a smaller chunksize for better load balancing
                 chunksize = max(1, len(tasks) // (self.num_processes * 4))
 
-                # Process results as they come in
+                # Process results as they come in with tqdm progress bar
                 results = []
-                for i, result in enumerate(pool.imap(test_variant_simpler_approximation, tasks, chunksize=chunksize)):
-                    variant_index, score = result
-                    results.append((variant_index, score))
-
-                    # Print progress occasionally
-                    if (i + 1) % 1000 == 0 or i + 1 == len(tasks):
-                        elapsed = time.time() - start_time
-                        print(
-                            f"Progress: {i + 1}/{len(tasks)} variants processed ({(i + 1) / len(tasks) * 100:.1f}%) in {elapsed:.2f} seconds")
+                with tqdm(total=len(tasks), desc="Test 3: Simpler Approximation", unit="variant") as pbar:
+                    for i, result in enumerate(
+                            pool.imap(test_variant_simpler_approximation, tasks, chunksize=chunksize)):
+                        variant_index, score = result
+                        results.append((variant_index, score))
+                        pbar.update(1)
 
                 # Filter successful variants
                 successful_variants = [(idx, score) for idx, score in results if score >= threshold]
