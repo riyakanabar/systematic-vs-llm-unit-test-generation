@@ -1,4 +1,4 @@
-# 12 test cases defined
+# 13 test cases defined
 test_cases = [
     # Format: (pc_cons_fx, epsilon)
     (   #Testcase1
