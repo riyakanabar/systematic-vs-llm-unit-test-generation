@@ -1,5 +1,4 @@
 import inspect
-from utils import middle_to_end_alternating_traversal, middle_divide_conquer_traversal
 import multiprocessing
 
 a_values = range(1, 4)
@@ -14,30 +13,18 @@ scaling_factors = [0.5, 1.0, 1.5]
 def left_to_right(pc_fx):
     return pc_fx[1:-1]
 
-def right_to_left(pc_fx):
-    return reversed(pc_fx[1:-1])
-
 def lowest_to_highest(pc_fx):
     return sorted(pc_fx[1:-1], key=lambda x: x[1])
 
 def highest_to_lowest(pc_fx):
     return sorted(pc_fx[1:-1], key=lambda x: x[1], reverse=True)
 
-def middle_to_ends_wrapper(pc_fx):
-    return middle_to_end_alternating_traversal(pc_fx[1:-1])
-
-def middle_divide_conquer_wrapper(pc_fx):
-    return middle_divide_conquer_traversal(pc_fx[1:-1])
-
 
 # Use named functions instead of lambdas for better pickling support
 loop_variations = [
     left_to_right,
-    right_to_left,
     lowest_to_highest,
-    highest_to_lowest,
-    middle_to_ends_wrapper,
-    middle_divide_conquer_wrapper
+    highest_to_lowest
 ]
 
 

@@ -1,7 +1,7 @@
 # 13 test cases defined
 test_cases = [
     # Format: (pc_cons_fx, epsilon)
-    (   #Testcase1
+    (   #Testcase1 - example of a constant function
         [[-float('inf'), float('inf')],[0,5],[4.0,float('inf')]],
         0.4
     ),
