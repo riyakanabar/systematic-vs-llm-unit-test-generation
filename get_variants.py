@@ -1,11 +1,13 @@
 import inspect
 import multiprocessing
+import functools
 
 a_values = range(1, 2)
 b_values = range(1, 2)
 c_values = range(1, 2)
 d_values = range(1, 2)
 alpha_values = [-1, 1]  # Coefficient for the absolute term
+
 
 # Define traversal strategies as named functions instead of lambdas for pickling
 def left_to_right(pc_fx):
@@ -14,7 +16,6 @@ def lowest_to_highest(pc_fx):
     return sorted(pc_fx[1:-1], key=lambda x: x[1])
 def highest_to_lowest(pc_fx):
     return sorted(pc_fx[1:-1], key=lambda x: x[1], reverse=True)
-
 loop_variations = [
     left_to_right,
     lowest_to_highest,
@@ -26,30 +27,43 @@ def m(x, y, v):
     a, b, c, d, alpha = v
     return (a * x + b * y + alpha * abs(c * x - d * y)) / 2
 
-
 def print_algorithm_code(algorithm):
     try:
-        loop_name = algorithm.loop_behavior.__name__
+        loop_behavior = algorithm.keywords['loop_behavior']
+        loop_name = loop_behavior.__name__
+        params_min = algorithm.keywords['params_min']
+        params_max = algorithm.keywords['params_max']
+
         print(f"Traversal variant used: {loop_name}")
         print(
-            f"a_min = {algorithm.a_min}, b_min = {algorithm.b_min}, c_min = {algorithm.c_min}, d_min = {algorithm.d_min}, alpha_min = {algorithm.alpha_min}")
+            f"a_min = {params_min[0]}, b_min = {params_min[1]}, c_min = {params_min[2]}, d_min = {params_min[3]}, alpha_min = {params_min[4]}")
         print(
-            f"a_max = {algorithm.a_max}, b_max = {algorithm.b_max}, c_max = {algorithm.c_max}, d_max = {algorithm.d_max}, alpha_max = {algorithm.alpha_max}")
+            f"a_max = {params_max[0]}, b_max = {params_max[1]}, c_max = {params_max[2]}, d_max = {params_max[3]}, alpha_max = {params_max[4]}")
     except Exception as e:
         print(f"Error retrieving source code: {e}")
 
 
 def create_variant_wrapper(args):
-    """Wrapper function for multiprocessing"""
+    """Create a variant algorithm with the given parameters
+    Returns a memory-efficient function that is also picklable
+    """
     loop_behavior, params_min, params_max = args
-    return create_variant(loop_behavior, params_min, params_max)
+
+    # Create a partial function that's picklable
+    variant = functools.partial(variant_function, loop_behavior=loop_behavior,
+                                params_min=params_min, params_max=params_max)
+
+    # Set attributes for print_algorithm_code
+    variant.__name__ = loop_behavior.__name__
+    variant.params_min = params_min
+    variant.params_max = params_max
+
+    return variant
 
 
 def get_variation_algorithms():
-    # Calculate the number of parameter combinations
     param_combinations_count = len(a_values) * len(b_values) * len(c_values) * len(d_values) * len(alpha_values)
     total_count = len(loop_variations) * param_combinations_count * param_combinations_count
-
     print(f"Generating {total_count} algorithm variants in parallel...")
 
     # Create all parameter combinations to process in parallel
@@ -84,8 +98,6 @@ def get_variation_algorithms():
 
 
 def variant_function(pc_fx, epsilon, loop_behavior, params_min, params_max):
-    """The algorithm implementation, separated from create_variant for pickling"""
-
     optimal_pc_fx = []
     pc_fx_traversal_order = list(loop_behavior(pc_fx))
     n = len(pc_fx_traversal_order)
@@ -127,25 +139,3 @@ def variant_function(pc_fx, epsilon, loop_behavior, params_min, params_max):
     optimal_pc_fx.append([pc_fx[-1][0], float('inf')])  # Append last boundary
     given_num_pieces = len(pc_fx) - 2
     return optimal_pc_fx, optimal_num_pieces, given_num_pieces
-
-
-class VariantAlgorithm:
-    def __init__(self, loop_behavior, params_min, params_max):
-        self.loop_behavior = loop_behavior
-        # Store original parameters for debugging/analysis
-        self.a_min, self.b_min = params_min[0], params_min[1]
-        self.c_min, self.d_min = params_min[2], params_min[3]
-        self.alpha_min = params_min[4]
-        self.a_max, self.b_max = params_max[0], params_max[1]
-        self.c_max, self.d_max = params_max[2], params_max[3]
-        self.alpha_max = params_max[4]
-
-    def __call__(self, pc_fx, epsilon):
-        return variant_function(pc_fx, epsilon, self.loop_behavior,
-                                (self.a_min, self.b_min, self.c_min, self.d_min, self.alpha_min),
-                                (self.a_max, self.b_max, self.c_max, self.d_max, self.alpha_max))
-
-
-def create_variant(loop_behavior, params_min, params_max):
-    """Create a variant algorithm with the given parameters"""
-    return VariantAlgorithm(loop_behavior, params_min, params_max)

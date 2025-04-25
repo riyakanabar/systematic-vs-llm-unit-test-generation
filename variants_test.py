@@ -1,5 +1,5 @@
 from get_variants import get_variation_algorithms, print_algorithm_code
-from pc_cons_apx import approximate_pc_cons_fx
+from pc_cons_apx import approximate_pc_shortest_path
 from test_cases import test_cases
 import unittest
 import numpy as np
@@ -66,7 +66,7 @@ class AlgorithmFunctionalityTests(unittest.TestCase):
         print("Setting up test cases and algorithms...")
         cls.algorithms = get_variation_algorithms()
         print(f"Generated {len(cls.algorithms)} algorithm variants.")
-        cls.original_algorithm = staticmethod(approximate_pc_cons_fx)
+        cls.original_algorithm = staticmethod(approximate_pc_shortest_path)
         cls.test_cases = test_cases
         cls.valid_variants = list(range(0, len(cls.algorithms)))  # Start with all variants as valid
         cls.num_processes = max(1, multiprocessing.cpu_count() - 1)
