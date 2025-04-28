@@ -3,11 +3,14 @@ import multiprocessing
 import functools
 import operator
 
+#Parameter Ranges
 a_values = range(1, 2)
 b_values = range(1, 2)
 c_values = range(1, 2)
 d_values = range(1, 2)
-alpha_values = [-1, 1]  # Coefficient for the absolute term
+alpha_values = [-1, 1]
+
+#Condition operators
 condition_ops = [operator.ge, operator.le]  # >=, <=
 
 # Define traversal strategies as named functions instead of lambdas for pickling
@@ -17,21 +20,14 @@ def lowest_to_highest(pc_fx):
     return sorted(pc_fx[1:-1], key=lambda x: x[1])
 def highest_to_lowest(pc_fx):
     return sorted(pc_fx[1:-1], key=lambda x: x[1], reverse=True)
-loop_variations = [
-    left_to_right,
-    lowest_to_highest,
-    highest_to_lowest
-]
+loop_variations = [left_to_right, lowest_to_highest, highest_to_lowest]
 
+#Linear-absolute function
 def m(x, y, v):
-    """Linear-absolute function: m(x, y, v) = (v[0]*x + v[1]*y + v[4]*|v[2]*x - v[3]*y|) / 2 """
     a, b, c, d, alpha = v
     return (a * x + b * y + alpha * abs(c * x - d * y)) / 2
 
 def cond(a, b, op):
-    """Condition function that applies the given operator between two values
-    cond(a, b, op) = a op b where op is the operator
-    """
     return op(a, b)
 
 def print_algorithm_code(algorithm):
@@ -121,7 +117,7 @@ def get_variation_algorithms():
 
     return algorithms
 
-
+#Variant core function
 def variant_function(pc_fx, epsilon, loop_behavior, params_min, params_max, condition_params):
     optimal_pc_fx = []
     pc_fx_traversal_order = list(loop_behavior(pc_fx))
