@@ -1,5 +1,5 @@
 from get_variants import generate_variant_configs, create_variant_wrapper
-from pc_cons_apx import approximate_pc_cons_fx
+from pc_cons_apx import approximate_pc_shortest_path
 from test_cases import test_cases
 import numpy as np
 import multiprocessing
@@ -16,7 +16,7 @@ def is_within_epsilon(pc_cons_fx, optimal_pc_fx, epsilon):
     return True
 
 def run_baseline_algorithm(pc_cons_fx, epsilon):
-    _, optimal_num_pieces, _ = approximate_pc_cons_fx(pc_cons_fx, epsilon)
+    _, optimal_num_pieces, _ = approximate_pc_shortest_path(pc_cons_fx, epsilon)
     return optimal_num_pieces
 
 # --- Core Test Per Variant ---
