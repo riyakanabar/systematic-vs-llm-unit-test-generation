@@ -1,4 +1,4 @@
-from get_variants import generate_variant_configs, create_variant_wrapper
+from grid_search.get_variants import generate_variant_configs, create_variant_wrapper
 from pc_cons_apx import approximate_pc_shortest_path
 from test_cases import test_cases
 import numpy as np

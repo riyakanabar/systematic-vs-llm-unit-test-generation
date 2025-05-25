@@ -1,0 +1,20 @@
+DIMENSION      14             # 14 parameters total
+
+BB_EXE         ./bb        # Your blackbox executable
+BB_OUTPUT_TYPE OBJ            # Just minimizing objective (no constraints)
+
+X0             ( 0 1 1 1 1 -1 1 1 1 1 1 0 0 1 )     
+
+LOWER_BOUND    ( 0 1 1 1 1 -1 1 1 1 1 -1 0 0 0 )
+
+UPPER_BOUND    ( 2 10 10 10 10 1 10 10 10 10 1 1 1 1 )
+
+# Define integer variables (all except alpha values)
+BB_INPUT_TYPE ( I I I I I I I I I I I I I I )
+
+LH_SEARCH 1000 0
+MAX_BB_EVAL    10000            # Maximum evaluations
+DISPLAY_DEGREE 2
+#DISPLAY_ALL_EVAL true          #Show all evaluations
+DISPLAY_STATS BBE ( SOL ) OBJ
+STATS_FILE variant_results.txt BBE ( SOL ) OBJ
