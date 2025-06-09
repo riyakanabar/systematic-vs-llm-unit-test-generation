@@ -8,8 +8,7 @@ import numpy as np
 # Add the parent directory to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from grid_search.get_variants import variant_function, loop_variations
-from grid_search.variants_test import is_within_epsilon
-from pc_cons_apx import approximate_pc_shortest_path
+from optimal_algorithms.pc_cons_apx import approximate_pc_shortest_path
 from test_cases import test_cases
 
 # Create a log file for valid variants

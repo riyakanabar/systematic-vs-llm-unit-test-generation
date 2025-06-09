@@ -1,5 +1,5 @@
 from get_variants_serial import get_variation_algorithms, print_algorithm_code
-from pc_cons_apx import approximate_pc_cons_fx
+from optimal_algorithms.pc_cons_apx import approximate_pc_cons_fx
 from test_cases import test_cases
 import unittest
 import numpy as np

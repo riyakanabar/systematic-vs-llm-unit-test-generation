@@ -1,4 +1,4 @@
-from pc_cons_apx import approximate_pc_cons_fx, plot_pc_cons_fx, approximate_pc_shortest_path
+from optimal_algorithms.pc_cons_apx import approximate_pc_cons_fx, plot_pc_cons_fx
 from test_cases import test_cases
 
 pc_cons_fx = test_cases[3][0]

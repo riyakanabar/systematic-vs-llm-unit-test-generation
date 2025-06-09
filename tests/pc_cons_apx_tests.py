@@ -1,5 +1,5 @@
 import unittest
-from pc_cons_apx import approximate_pc_cons_fx
+from optimal_algorithms.pc_cons_apx import approximate_pc_cons_fx
 
 class TestPiecewiseConstantApproximation(unittest.TestCase):
 

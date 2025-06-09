@@ -1,4 +1,4 @@
-from pc_linear_apx import approximate_pc_linear_fx, plot_piecewise_linear_approximation
+from optimal_algorithms.pc_linear_apx import approximate_pc_linear_fx, plot_piecewise_linear_approximation
 from test_cases import test_cases
 
 pc_linear_fx = test_cases[9][0]
