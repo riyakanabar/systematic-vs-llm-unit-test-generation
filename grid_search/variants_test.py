@@ -6,14 +6,38 @@ import multiprocessing
 from tqdm import tqdm
 import time
 
+
 def is_within_epsilon(pc_cons_fx, optimal_pc_fx, epsilon):
+    """Check if the approximation is within epsilon of the original function."""
     optimal_pc_fx_sorted = sorted(optimal_pc_fx, key=lambda x: x[0])
+
+    # For each point in the original function (excluding boundary points)
     for i in range(1, len(pc_cons_fx) - 1):
+        x = pc_cons_fx[i][0]
         y = pc_cons_fx[i][1]
-        y_opt = optimal_pc_fx_sorted[i - 1][1]
+
+        # Find the segment in optimal_pc_fx_sorted that contains x
+        # We need the largest j where optimal_pc_fx_sorted[j][0] <= x
+        j = -1
+        for k in range(len(optimal_pc_fx_sorted)):
+            if optimal_pc_fx_sorted[k][0] <= x:
+                j = k
+            else:
+                break
+
+        # If we couldn't find a valid segment
+        if j < 0:
+            return False
+
+        # Get the y-value from the optimal function
+        y_opt = optimal_pc_fx_sorted[j][1]
+
+        # Check if within epsilon
         if not np.isclose(y, y_opt, atol=epsilon, rtol=1e-9):
             return False
+
     return True
+
 
 def run_baseline_algorithm(pc_cons_fx, epsilon):
     _, optimal_num_pieces, _ = approximate_pc_shortest_path(pc_cons_fx, epsilon)
