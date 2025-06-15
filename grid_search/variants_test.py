@@ -5,34 +5,25 @@ import numpy as np
 import multiprocessing
 from tqdm import tqdm
 import time
-
+import bisect
 
 def is_within_epsilon(pc_cons_fx, optimal_pc_fx, epsilon):
     """Check if the approximation is within epsilon of the original function."""
     optimal_pc_fx_sorted = sorted(optimal_pc_fx, key=lambda x: x[0])
+    xs = [x for x, y in optimal_pc_fx_sorted]
+    ys = [y for x, y in optimal_pc_fx_sorted]
 
-    # For each point in the original function (excluding boundary points)
     for i in range(1, len(pc_cons_fx) - 1):
         x = pc_cons_fx[i][0]
         y = pc_cons_fx[i][1]
 
-        # Find the segment in optimal_pc_fx_sorted that contains x
-        # We need the largest j where optimal_pc_fx_sorted[j][0] <= x
-        j = -1
-        for k in range(len(optimal_pc_fx_sorted)):
-            if optimal_pc_fx_sorted[k][0] <= x:
-                j = k
-            else:
-                break
+        # Use bisect to find segment index
+        j = bisect.bisect_right(xs, x) - 1
 
-        # If we couldn't find a valid segment
         if j < 0:
             return False
 
-        # Get the y-value from the optimal function
-        y_opt = optimal_pc_fx_sorted[j][1]
-
-        # Check if within epsilon
+        y_opt = ys[j]
         if not np.isclose(y, y_opt, atol=epsilon, rtol=1e-9):
             return False
 
