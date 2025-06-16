@@ -6,10 +6,10 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from optimal_algorithms.pc_cons_apx import approximate_pc_shortest_path
 from grid_search.variants_test import is_within_epsilon
 
-x_values = range(0, 3)
-y_values = range(1, 3)
-epsilon_values = [0.1] #[0.1, 0.25, 0.5, 0.7, 1, 1.5, 2, 3, 5, 7]
-pieces = [2]
+x_values = range(0, 11)
+y_values = range(1, 11)
+epsilon_values = [0.1, 0.25, 0.5, 0.7, 1, 1.5, 2, 3, 5, 7]
+pieces = range(1,11)
 
 
 def generate_test_case(x_indices, y_values_for_points, x_values):
@@ -57,22 +57,26 @@ def evaluate_test_case(pc_cons_fx, epsilon, algorithm):
 def test_algorithm(algorithm):
     """Find a counterexample where the given algorithm fails the optimality"""
     count = 0
+
+    # Calculate total number of test cases
     total_test_cases = 0
-
-    # For each x-index, we want to test all possible next x-values as infinity boundaries
-    # For pieces=1, this means for each x in [0,1,2], we test infinity at [1,2,3]
-    # This gives us 3 x-indices × 3 y-values × 3 possible infinity boundaries = 27 test cases
-    # But we exclude cases where infinity boundary ≤ x-index, so we get 3+2+1=6 valid x-index/boundary pairs
-    # With 3 y-values, that's 6 × 3 = 18 test cases
-
-    # Calculate total number of valid test cases
     for num_pieces in pieces:
+        # For each number of pieces, we need to generate all combinations of x-indices
+        x_combinations = list(itertools.combinations(range(len(x_values) - 1), num_pieces))
+        # For each combination, we need to add a boundary point after the last x-index
         valid_combinations = 0
-        for x_idx in range(len(x_values) - 1):  # Exclude last x-value as it needs a next value
-            for boundary_idx in range(x_idx + 1, len(x_values)):
+        for x_indices in x_combinations:
+            if not x_indices:  # Handle empty combinations (0 pieces)
+                valid_combinations += 1
+                continue
+
+            # For each combination, count valid boundary positions
+            last_x_idx = x_indices[-1]
+            for boundary_idx in range(last_x_idx + 1, len(x_values)):
                 valid_combinations += 1
 
-        total_test_cases = valid_combinations * (len(y_values) ** num_pieces) * len(epsilon_values)
+        # Each test case has num_pieces y-values and 1 epsilon value
+        total_test_cases += valid_combinations * (len(y_values) ** num_pieces) * len(epsilon_values)
 
     print(f"Total test cases to evaluate: {total_test_cases}")
 
@@ -85,14 +89,34 @@ def test_algorithm(algorithm):
 
     for num_pieces in pieces:
         for epsilon in epsilon_values:
-            # Instead of using combinations, we'll manually create the test cases
-            # to ensure we get all combinations of x-indices with different infinity boundaries
-            for x_idx in range(len(x_values) - 1):  # Exclude last x-value
-                for boundary_idx in range(x_idx + 1, len(x_values)):
-                    for y_value in y_values:
-                        # Create the test case with the specified x-index, y-value, and infinity boundary
+            # Generate all combinations of x-indices for the given number of pieces
+            x_combinations = list(itertools.combinations(range(len(x_values) - 1), num_pieces))
+
+            for x_indices in x_combinations:
+                # For each combination of x-indices, we need to add a boundary point after the last x-index
+                if not x_indices:  # Handle empty combinations (0 pieces)
+                    # Special case for 0 pieces: just -inf to +inf
+                    points = [[-float('inf'), float('inf')], [float(x_values[0]), float('inf')]]
+                    count += 1
+                    print(f"Testcase: {count}")
+                    print(f"fx: {points}")
+                    print(f"pieces: {num_pieces}")
+                    print(f"epsilon: {epsilon}")
+                    continue
+
+                # For each valid boundary position after the last x-index
+                last_x_idx = x_indices[-1]
+                for boundary_idx in range(last_x_idx + 1, len(x_values)):
+                    # Generate all combinations of y-values for the transition points
+                    for y_values_combination in itertools.product(y_values, repeat=num_pieces):
+                        # Create the test case with the specified transition points
                         points = [[-float('inf'), float('inf')]]
-                        points.append([float(x_values[x_idx]), float(y_value)])
+
+                        # Add each transition point with its y-value
+                        for i, x_idx in enumerate(x_indices):
+                            points.append([float(x_values[x_idx]), float(y_values_combination[i])])
+
+                        # Add the infinity boundary
                         points.append([float(x_values[boundary_idx]), float('inf')])
 
                         count += 1
