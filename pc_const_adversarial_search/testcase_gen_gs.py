@@ -1,7 +1,6 @@
 import itertools
 import sys
 import os
-
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from optimal_algorithms.pc_cons_apx import approximate_pc_shortest_path
 from grid_search.variants_test import is_within_epsilon
@@ -10,32 +9,6 @@ x_values = range(0, 11)
 y_values = range(1, 11)
 epsilon_values = [0.1, 0.25, 0.5, 0.7, 1, 1.5, 2, 3, 5, 7]
 pieces = range(1,11)
-
-
-def generate_test_case(x_indices, y_values_for_points, x_values):
-    points = [[-float('inf'), float('inf')]]
-
-    # Add the transition points
-    for i, x_idx in enumerate(x_indices):
-        x = x_values[x_idx]
-        y = y_values_for_points[i]
-        points.append([float(x), float(y)])
-
-    # Add the next x-value after the last transition as the infinity boundary
-    if len(x_indices) > 0:
-        last_x_idx = x_indices[-1]
-        next_x_idx = last_x_idx + 1
-        if next_x_idx < len(x_values):
-            next_x = float(x_values[next_x_idx])
-        else:
-            next_x = float(x_values[-1] + 1)
-    else:
-        next_x = float(x_values[0] + 1)
-
-    points.append([next_x, float('inf')])
-
-    return points
-
 
 def evaluate_test_case(pc_cons_fx, epsilon, algorithm):
     """Evaluate if the algorithm fails the test case compared to the optimal algorithm"""
@@ -57,11 +30,8 @@ def evaluate_test_case(pc_cons_fx, epsilon, algorithm):
 def test_algorithm(algorithm):
     """Find a counterexample where the given algorithm fails the optimality"""
     count = 0
-
-    # Calculate total number of test cases
     total_test_cases = 0
     for num_pieces in pieces:
-        # For each number of pieces, we need to generate all combinations of x-indices
         x_combinations = list(itertools.combinations(range(len(x_values) - 1), num_pieces))
         # For each combination, we need to add a boundary point after the last x-index
         valid_combinations = 0
@@ -80,7 +50,6 @@ def test_algorithm(algorithm):
 
     print(f"Total test cases to evaluate: {total_test_cases}")
 
-    # Set up progress bar if tqdm is available
     try:
         from tqdm import tqdm
         progress_bar = tqdm(total=total_test_cases, desc="Testing", unit="case")
@@ -89,7 +58,6 @@ def test_algorithm(algorithm):
 
     for num_pieces in pieces:
         for epsilon in epsilon_values:
-            # Generate all combinations of x-indices for the given number of pieces
             x_combinations = list(itertools.combinations(range(len(x_values) - 1), num_pieces))
 
             for x_indices in x_combinations:
@@ -98,10 +66,10 @@ def test_algorithm(algorithm):
                     # Special case for 0 pieces: just -inf to +inf
                     points = [[-float('inf'), float('inf')], [float(x_values[0]), float('inf')]]
                     count += 1
-                    print(f"Testcase: {count}")
-                    print(f"fx: {points}")
-                    print(f"pieces: {num_pieces}")
-                    print(f"epsilon: {epsilon}")
+                    # print(f"Testcase: {count}")
+                    # print(f"fx: {points}")
+                    # print(f"pieces: {num_pieces}")
+                    # print(f"epsilon: {epsilon}")
                     continue
 
                 # For each valid boundary position after the last x-index
@@ -120,12 +88,11 @@ def test_algorithm(algorithm):
                         points.append([float(x_values[boundary_idx]), float('inf')])
 
                         count += 1
-                        print(f"Testcase: {count}")
-                        print(f"fx: {points}")
-                        print(f"pieces: {num_pieces}")
-                        print(f"epsilon: {epsilon}")
+                        # print(f"Testcase: {count}")
+                        # print(f"fx: {points}")
+                        # print(f"pieces: {num_pieces}")
+                        # print(f"epsilon: {epsilon}")
 
-                        # Update progress bar
                         if progress_bar:
                             progress_bar.update(1)
 
