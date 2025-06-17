@@ -31,8 +31,12 @@ def test_algorithm(algorithm):
     """Find a counterexample where the given algorithm fails the optimality"""
     count = 0
     total_test_cases = 0
+    precomputed_x_combinations = {
+        num_pieces: list(itertools.combinations(range(len(x_values) - 1), num_pieces))
+        for num_pieces in pieces
+    }
     for num_pieces in pieces:
-        x_combinations = list(itertools.combinations(range(len(x_values) - 1), num_pieces))
+        x_combinations = precomputed_x_combinations[num_pieces]
         # For each combination, we need to add a boundary point after the last x-index
         valid_combinations = 0
         for x_indices in x_combinations:
@@ -57,9 +61,8 @@ def test_algorithm(algorithm):
         progress_bar = None
 
     for num_pieces in pieces:
+        x_combinations = precomputed_x_combinations[num_pieces]
         for epsilon in epsilon_values:
-            x_combinations = list(itertools.combinations(range(len(x_values) - 1), num_pieces))
-
             for x_indices in x_combinations:
                 # For each combination of x-indices, we need to add a boundary point after the last x-index
                 if not x_indices:  # Handle empty combinations (0 pieces)
