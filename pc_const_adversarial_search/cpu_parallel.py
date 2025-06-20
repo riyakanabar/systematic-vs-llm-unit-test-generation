@@ -116,42 +116,29 @@ def test_algorithm_parallel(algorithm, batch_size=1000):
     """
     print("Running test_algorithm in parallel...")
     start_time = time.time()
-
-    # Calculate total test cases for progress tracking
     total_cases = estimate_total_cases()
     print(f"Estimated total test cases: {total_cases}")
-
-    # Set up progress bar if tqdm is available
     try:
         from tqdm import tqdm
         progress_bar = tqdm(total=total_cases, desc="Testing", unit="case")
     except ImportError:
         progress_bar = None
         print("Install tqdm for progress tracking")
-
-    # Determine number of processes to use (leave one core free)
     num_processes = max(1, multiprocessing.cpu_count() - 1)
     print(f"Using {num_processes} processes")
 
-    # Create a partial function with the algorithm already bound
     evaluate_batch = partial(evaluate_test_case_batch, algorithm=algorithm)
 
     # Process batches in parallel
     with multiprocessing.Pool(processes=num_processes) as pool:
-        cases_processed = 0
-
-        for batch in generate_test_cases(batch_size):
-            # Process this batch
-            result = evaluate_batch(batch)
+        # Process batches in parallel using imap_unordered (lazy evaluation)
+        for result in pool.imap_unordered(evaluate_batch, generate_test_cases(batch_size)):
             failed, test_name, fx, epsilon, apx_fx, alg_pieces, opt_fx, opt_pieces, given_pieces, count = result
 
             # Update progress
-            batch_size_actual = len(batch)
-            cases_processed += batch_size_actual
             if progress_bar:
-                progress_bar.update(batch_size_actual)
+                progress_bar.update(batch_size)
 
-            # If we found a counterexample, stop and report it
             if failed:
                 if progress_bar:
                     progress_bar.close()
@@ -168,10 +155,9 @@ def test_algorithm_parallel(algorithm, batch_size=1000):
                 print(f"Given pieces: {given_pieces}")
                 return fx, epsilon
 
-    # Clean up and report results
     if progress_bar:
         progress_bar.close()
 
     elapsed_time = time.time() - start_time
-    print(f"No counterexample found after testing {cases_processed} cases. (Time: {elapsed_time:.2f}s)")
+    print(f"No counterexample found after testing all cases. (Time: {elapsed_time:.2f}s)")
     return None
