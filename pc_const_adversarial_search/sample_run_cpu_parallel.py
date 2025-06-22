@@ -7,5 +7,5 @@ import multiprocessing
 if __name__ == "__main__":
     # Set the start method to 'spawn' for Windows compatibility
     multiprocessing.set_start_method('spawn', force=True)
-    test_algorithm_parallel(variant7)
+    test_algorithm_parallel(variant1)
 
