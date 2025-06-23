@@ -51,6 +51,13 @@ def approximate_pc_linear_fx(pc_linear_fx, w):
     y = np.array(y)
     x = np.arange(len(y))
     y = np.round(y, 6)
+
+    if len(y) <= 2:
+        optimal_pc_linear_fx = np.array(pc_linear_fx)
+        optimal_num_pieces = len(pc_linear_fx) - 1
+        given_num_pieces = optimal_num_pieces
+        return optimal_pc_linear_fx, optimal_num_pieces, given_num_pieces
+
     p_plus = (x[0], y[0] + w)
     l_plus = (x[0], y[0] + w)
     r_plus = (x[1], y[1] + w)
@@ -63,7 +70,6 @@ def approximate_pc_linear_fx(pc_linear_fx, w):
     t_minus = {(x[1], y[1] - w): (x[0], y[0] - w)}
     q = []
     i = 2
-
     while i < len(y):
         p = (x[i - 1], y[i - 1] + w)
         p_i_plus = (x[i], y[i] + w)
@@ -117,6 +123,7 @@ def approximate_pc_linear_fx(pc_linear_fx, w):
 
     a = find_intersection(l_plus, r_minus, p_plus, p_minus)
     b = find_intersection(l_minus, r_plus, p_minus, p_plus)
+    print(f"a: {a} and b is {b}")
     if a is None or b is None:
         return np.array([])
     p = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)

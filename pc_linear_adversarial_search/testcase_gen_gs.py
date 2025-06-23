@@ -25,19 +25,13 @@ def is_within_epsilon(original_fx, approximation, epsilon):
             return False
     return True
 
-
 def estimate_total_cases():
-    """
-    Estimate the total number of test cases to be generated
-    """
     total = 0
     for num_pieces in pieces:
-        # Number of ways to select x transition points
-        x_combinations = len(list(itertools.combinations(range(len(x_values) - 1), num_pieces)))
-        # For each x combination, we have |y_values|^num_pieces possible y values
-        total += x_combinations * (len(y_values) ** num_pieces) * len(epsilon_values)
+        num_x_choices = len(list(itertools.combinations(x_values, num_pieces + 1)))
+        num_y_combinations = len(y_values) ** (num_pieces + 1)
+        total += num_x_choices * num_y_combinations * len(epsilon_values)
     return total
-
 
 def evaluate_test_case(points, epsilon, algorithm):
     """
@@ -59,19 +53,17 @@ def evaluate_test_case(points, epsilon, algorithm):
 
     return False, "", apx_fx, alg_pieces, optimal_fx, opt_pieces, given_pieces
 
-
 def test_algorithm(algorithm):
     """
-    Test an algorithm to find a counterexample where it's not optimal
+    Test an algorithm to find a counterexample where it's not optimal.
+    Generates valid piecewise linear test cases.
     """
     print("Running test_algorithm...")
     start_time = time.time()
 
-    # Calculate total test cases for progress tracking
     total_cases = estimate_total_cases()
     print(f"Estimated total test cases: {total_cases}")
 
-    # Set up progress tracking
     try:
         from tqdm import tqdm
         progress_bar = tqdm(total=total_cases, desc="Testing", unit="case")
@@ -81,40 +73,19 @@ def test_algorithm(algorithm):
 
     count = 0
 
-    # Precompute x combinations for each number of pieces
-    precomputed_x_combinations = {
-        num_pieces: list(itertools.combinations(range(len(x_values) - 1), num_pieces))
-        for num_pieces in pieces
-    }
-
     for num_pieces in pieces:
-        x_combinations = precomputed_x_combinations[num_pieces]
+        # You need num_pieces + 1 x-points
+        x_combinations = list(itertools.combinations(x_values, num_pieces + 1))
+
         for epsilon in epsilon_values:
-            for x_indices in x_combinations:
-                # Get the boundary index (last x value)
-                boundary_idx = len(x_values) - 1
-
-                # Generate all combinations of y values for the transition points
-                for y_comb in itertools.product(y_values, repeat=num_pieces):
-                    # Create the test case with the specified transition points
-                    points = []
-
-                    # Add the start point
-                    points.append((float(x_values[0]), float(y_values[0])))
-
-                    # Add each transition point with its y-value
-                    for i, x_idx in enumerate(x_indices):
-                        points.append((float(x_values[x_idx + 1]), float(y_comb[i])))
-
-                    # Add the end point
-                    points.append((float(x_values[boundary_idx]), float(y_values[-1])))
+            for x_comb in x_combinations:
+                for y_comb in itertools.product(y_values, repeat=len(x_comb)):
+                    points = [(float(x), float(y)) for x, y in zip(x_comb, y_comb)]
 
                     count += 1
-
                     if progress_bar:
                         progress_bar.update(1)
-
-                    # Evaluate this test case
+                    print(f"Testcase{count}: {points} and epsilon is {epsilon}")
                     failed, test_name, apx_fx, alg_pieces, optimal_fx, opt_pieces, given_pieces = evaluate_test_case(
                         points, epsilon, algorithm)
 
@@ -132,10 +103,8 @@ def test_algorithm(algorithm):
                         print(f"Given pieces: {given_pieces}")
                         return points, epsilon
 
-    # Clean up and report results
     if progress_bar:
         progress_bar.close()
-
     elapsed_time = time.time() - start_time
     print(f"No counterexample found after testing {count} cases. (Time: {elapsed_time:.2f}s)")
     return None
