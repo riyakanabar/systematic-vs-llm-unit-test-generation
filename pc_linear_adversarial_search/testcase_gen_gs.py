@@ -3,7 +3,7 @@ import time
 import numpy as np
 import sys
 import os
-
+from scipy.interpolate import interp1d
 # Add parent directory to path to import from parent directory
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from optimal_algorithms.pc_linear_apx import approximate_pc_linear_fx, reconstruct_piecewise_function
@@ -14,15 +14,31 @@ y_values =  range(1, 4)
 epsilon_values = [0.1, 0.25,0.5]
 pieces = range(1,4)
 
-
 def is_within_epsilon(original_fx, approximation, epsilon):
-    original_y_values = reconstruct_piecewise_function(original_fx)
-    approx_y_values = reconstruct_piecewise_function(approximation)
-    for orig_y, approx_y in zip(original_y_values, approx_y_values):
+    # Sort both functions by x-values
+    original_fx = sorted(original_fx, key=lambda p: p[0])
+    approximation = sorted(approximation, key=lambda p: p[0])
+
+    for x, orig_y in original_fx:
+        approx_y = None
+        for i in range(len(approximation) - 1):
+            if approximation[i][0] <= x <= approximation[i + 1][0]:
+                slope = (approximation[i + 1][1] - approximation[i][1]) / (
+                            approximation[i + 1][0] - approximation[i][0])
+                intercept = approximation[i][1] - slope * approximation[i][0]
+                approx_y = slope * x + intercept
+                break
+        if approx_y is None and approximation:  # Handle case where x is outside the range
+            approx_y = approximation[-1][1]
+
         if not np.isclose(orig_y, approx_y, atol=epsilon, rtol=1e-6):
             print("here")
-            print(original_y_values, approx_y_values)
+            print(f"Original: {original_fx}")
+            print(f"Approximation: {approximation}")
+            print(f"epsilon: {epsilon}")
+            print(f"At x={x}: orig_y={orig_y}, approx_y={approx_y}")
             return False
+
     return True
 
 def estimate_total_cases():
@@ -44,7 +60,7 @@ def evaluate_test_case(points, epsilon, algorithm):
     optimal_fx, opt_pieces, given_pieces = approximate_pc_linear_fx(points, epsilon)
 
     # Test 1: Check if the approximation is within epsilon
-    if not is_within_epsilon(points, np.round(apx_fx,2), epsilon):
+    if not is_within_epsilon(points, apx_fx, epsilon):
         return True, "epsilon_bound", apx_fx, alg_pieces, optimal_fx, opt_pieces, given_pieces
 
     # Test 2: Check if algorithm uses more pieces than optimal
@@ -85,7 +101,6 @@ def test_algorithm(algorithm):
                     count += 1
                     if progress_bar:
                         progress_bar.update(1)
-                    print(f"Testcase{count}: {points} and epsilon is {epsilon}")
                     failed, test_name, apx_fx, alg_pieces, optimal_fx, opt_pieces, given_pieces = evaluate_test_case(
                         points, epsilon, algorithm)
 

@@ -1,8 +1,8 @@
 from optimal_algorithms.pc_linear_apx import approximate_pc_linear_fx, plot_piecewise_linear_approximation
 from test_cases import test_cases
 
-pc_linear_fx = test_cases[13][0]
-epsilon = test_cases[13][1]
+pc_linear_fx = test_cases[16][0]
+epsilon = test_cases[16][1]
 
 optimal_pc_linear_fx, optimal_num_pieces, given_num_pieces = approximate_pc_linear_fx(pc_linear_fx, epsilon)
 print(pc_linear_fx)
