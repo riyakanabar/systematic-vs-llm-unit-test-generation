@@ -38,7 +38,9 @@ def find_intersection(line1_start, line1_end, line2_start, line2_end):
     denominator = (line1_end[0] - line1_start[0]) * (line2_end[1] - line2_start[1]) - (
             line2_end[0] - line2_start[0]) * (line1_end[1] - line1_start[1])
     if abs(denominator) < 1e-10:
-        return None
+        x = (line1_start[0] + line1_end[0]) / 2
+        y = (line1_start[1] + line1_end[1]) / 2
+        return (np.round(x, 6), np.round(y, 6))
     x = ((line1_end[0] * line1_start[1] - line1_start[0] * line1_end[1]) * (line2_end[0] - line2_start[0]) -
          (line2_end[0] * line2_start[1] - line2_start[0] * line2_end[1]) * (
                      line1_end[0] - line1_start[0])) / denominator
@@ -49,7 +51,7 @@ def find_intersection(line1_start, line1_end, line2_start, line2_end):
 def approximate_pc_linear_fx(pc_linear_fx, w):
     y = reconstruct_piecewise_function(pc_linear_fx)
     y = np.array(y)
-    x = np.arange(len(y))
+    x = np.arange(pc_linear_fx[0][0], pc_linear_fx[0][0] + len(y))
     y = np.round(y, 6)
 
     if len(y) <= 2:
@@ -123,7 +125,6 @@ def approximate_pc_linear_fx(pc_linear_fx, w):
 
     a = find_intersection(l_plus, r_minus, p_plus, p_minus)
     b = find_intersection(l_minus, r_plus, p_minus, p_plus)
-    print(f"a: {a} and b is {b}")
     if a is None or b is None:
         return np.array([])
     p = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
@@ -148,8 +149,8 @@ def reconstruct_piecewise_function(pc_linear_fx):
         end_point = pivot_points[i + 1]
         if end_point[0] == start_point[0]:
             continue
-        slope = (start_point[1] - end_point[1]) / (start_point[0] - end_point[0])
-        intercept = start_point[1] - start_point[0] * slope
+        slope = (end_point[1] - start_point[1]) / (end_point[0] - start_point[0])
+        intercept = start_point[1] - slope * start_point[0]
         for x in range(int(start_point[0]), int(end_point[0])):
             y_values.append(x * slope + intercept)
     y_values.append(pivot_points[-1][1])
@@ -165,7 +166,7 @@ def plot_piecewise_linear_approximation(pc_linear_fx, optimal_pc_linear_fx, epsi
     """
     # Reconstruct the original function for plotting
     y_values = reconstruct_piecewise_function(pc_linear_fx)
-    x_values = np.arange(len(y_values))
+    x_values = np.arange(pc_linear_fx[0][0], pc_linear_fx[0][0] + len(y_values))
     plt.figure(figsize=(12, 6))
     plt.plot(x_values, y_values, label="Original function", color='blue', linewidth=4)
 
