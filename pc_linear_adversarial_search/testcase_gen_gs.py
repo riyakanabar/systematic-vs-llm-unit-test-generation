@@ -9,10 +9,10 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from optimal_algorithms.pc_linear_apx import approximate_pc_linear_fx, reconstruct_piecewise_function
 
 # Test case parameters
-x_values =  range(0, 4)
-y_values =  range(1, 4)
-epsilon_values = [0.1, 0.25,0.5]
-pieces = range(1,4)
+x_values =  range(0, 11)
+y_values =  range(1, 11)
+epsilon_values = [0.1, 0.25, 0.5, 0.7, 1, 1.5, 2, 3, 5, 7]
+pieces = range(1,11)
 
 def is_within_epsilon(original_fx, approximation, epsilon):
     # Sort both functions by x-values
@@ -27,11 +27,12 @@ def is_within_epsilon(original_fx, approximation, epsilon):
                             approximation[i + 1][0] - approximation[i][0])
                 intercept = approximation[i][1] - slope * approximation[i][0]
                 approx_y = slope * x + intercept
+                rounded_y = round(approx_y, 1)
                 break
         if approx_y is None and approximation:  # Handle case where x is outside the range
             approx_y = approximation[-1][1]
 
-        if not np.isclose(orig_y, approx_y, atol=epsilon, rtol=1e-6):
+        if not np.isclose(orig_y, rounded_y, atol=epsilon, rtol=1e-10):
             print("here")
             print(f"Original: {original_fx}")
             print(f"Approximation: {approximation}")
