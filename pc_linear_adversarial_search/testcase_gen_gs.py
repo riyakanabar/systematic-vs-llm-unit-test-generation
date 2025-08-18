@@ -27,7 +27,7 @@ def is_within_epsilon(original_fx, approximation, epsilon):
                             approximation[i + 1][0] - approximation[i][0])
                 intercept = approximation[i][1] - slope * approximation[i][0]
                 approx_y = slope * x + intercept
-                rounded_y = round(approx_y, 1)
+                rounded_y = round(approx_y, 2)
                 break
         if approx_y is None and approximation:  # Handle case where x is outside the range
             approx_y = approximation[-1][1]
@@ -37,7 +37,7 @@ def is_within_epsilon(original_fx, approximation, epsilon):
             print(f"Original: {original_fx}")
             print(f"Approximation: {approximation}")
             print(f"epsilon: {epsilon}")
-            print(f"At x={x}: orig_y={orig_y}, approx_y={approx_y}")
+            print(f"At x={x}: orig_y={orig_y}, approx_y={approx_y}, rounded_y={rounded_y}")
             return False
 
     return True
