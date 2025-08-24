@@ -1,7 +1,6 @@
 import numpy as np
 from itertools import combinations, product
-from sample_input_algorithm import optimal_algorithm
-
+from optimal_algorithm import MATLABOptimalAlgorithm
 N_values = range(1,6)  # 1 to 5 pieces
 a_values = [x for x in range(-5, 5) if x != 0]  # -5 to 5, excluding 0
 b_values = list(range(-5, 5))  # -5 to 5
@@ -11,6 +10,7 @@ epsilon_values = [0.1, 0.25, 0.5, 0.7, 1, 1.5, 2, 3, 5, 7]
 
 
 def test_algorithm(algorithm):
+    optimal_algorithm = MATLABOptimalAlgorithm()
     count = 0
     for N in N_values:
         for epsilon in epsilon_values:
@@ -20,10 +20,10 @@ def test_algorithm(algorithm):
                     f = np.array([coeffs[i::3] for i in range(3)])
 
                     count += 1
-                    print(f"Testcase#",count)
-                    print(f"Input N: {N}, Input function f: {f}")
-                    print(f"Input breakpoints: {breakpoints}")
-                    print(f"epsilon: {epsilon}")
+                    # print(f"Testcase#",count)
+                    # print(f"Input N: {N}, Input function f: {f}")
+                    # print(f"Input breakpoints: {breakpoints}")
+                    # print(f"epsilon: {epsilon}")
 
                     apx_fx, alg_breakpoints, alg_num_pieces = algorithm(f, list(breakpoints),epsilon)
                     optimal_fx, optimal_breakpoints, optimal_num_pieces = optimal_algorithm(f, list(breakpoints),epsilon)
@@ -40,9 +40,11 @@ def test_algorithm(algorithm):
                         print(f"Optimal function: {optimal_fx}")
                         print(f"Optimal breakpoints: {optimal_breakpoints}")
                         print(f"Optimal pieces: {optimal_num_pieces}")
+                        return
 
 
 
         print(f"All test cases passed for N = {N}")
 
     print(f"\nAll {count} test cases passed successfully!")
+    return None
