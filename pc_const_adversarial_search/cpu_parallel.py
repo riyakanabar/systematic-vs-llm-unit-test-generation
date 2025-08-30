@@ -7,12 +7,7 @@ from functools import partial
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from optimal_algorithms.pc_cons_apx import approximate_pc_shortest_path
 from grid_search.variants_test import is_within_epsilon
-
-
-x_values = range(0, 11)
-y_values = range(1, 11)
-epsilon_values = [0.1, 0.25, 0.5, 0.7, 1, 1.5, 2, 3, 5, 7]
-pieces = range(1, 11)
+from testcase_gen_gs import x_values, y_values, epsilon_values, pieces, count_total_cases
 
 
 def generate_test_cases(batch_size=1000):
@@ -68,21 +63,6 @@ def generate_test_cases(batch_size=1000):
     if batch:
         yield batch
 
-
-def estimate_total_cases():
-    total = 0
-    for num_pieces in pieces:
-        x_combinations = list(itertools.combinations(range(len(x_values) - 1), num_pieces))
-        for x_indices in x_combinations:
-            if not x_indices:
-                total += len(epsilon_values)
-                continue
-            last_x_idx = x_indices[-1]
-            for boundary_idx in range(last_x_idx + 1, len(x_values)):
-                total += (len(y_values) ** num_pieces) * len(epsilon_values)
-    return total
-
-
 def evaluate_test_case_batch(batch, algorithm):
     """
     Evaluate a batch of test cases against the algorithm
@@ -116,7 +96,7 @@ def test_algorithm_parallel(algorithm, batch_size=1000):
     """
     print("Running test_algorithm in parallel...")
     start_time = time.time()
-    total_cases = estimate_total_cases()
+    total_cases = count_total_cases(len(x_values),len(y_values), len(epsilon_values), len(pieces))
     print(f"Estimated total test cases: {total_cases}")
     try:
         from tqdm import tqdm
