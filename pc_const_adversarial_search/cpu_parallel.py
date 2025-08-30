@@ -72,13 +72,13 @@ def evaluate_test_case_batch(batch, algorithm):
         # Run the algorithm being tested
         apx_fx, alg_pieces, _ = algorithm(pc_cons_fx, epsilon)
 
-        # Run the optimal algorithm for comparison
-        optimal_fx, opt_pieces, given_pieces = approximate_pc_shortest_path(pc_cons_fx, epsilon)
-
         # Test 1: Check if the approximation is within epsilon
         if not is_within_epsilon(pc_cons_fx, apx_fx, epsilon):
             return (
-            True, "epsilon_bound", pc_cons_fx, epsilon, apx_fx, alg_pieces, optimal_fx, opt_pieces, given_pieces, count)
+            True, "epsilon_bound", pc_cons_fx, epsilon, apx_fx, alg_pieces, None, None, None, count)
+
+        # Run the optimal algorithm for comparison
+        optimal_fx, opt_pieces, given_pieces = approximate_pc_shortest_path(pc_cons_fx, epsilon)
 
         # Test 2: Check if algorithm uses more pieces than optimal
         if alg_pieces > opt_pieces:
@@ -87,7 +87,6 @@ def evaluate_test_case_batch(batch, algorithm):
 
     # No counterexample found in this batch
     return (False, "", None, None, None, None, None, None, None, batch[-1][2] if batch else 0)
-
 
 def test_algorithm_parallel(algorithm, batch_size=1000):
     """
@@ -130,9 +129,11 @@ def test_algorithm_parallel(algorithm, batch_size=1000):
                 print(f"Epsilon: {epsilon}")
                 print(f"Approximated fx: {apx_fx}")
                 print(f"Algorithm pieces: {alg_pieces}")
-                print(f"Optimal fx: {opt_fx}")
-                print(f"Optimal pieces: {opt_pieces}")
-                print(f"Given pieces: {given_pieces}")
+                if opt_fx is not None:
+                    print(f"Optimal fx: {opt_fx}")
+                    print(f"Optimal pieces: {opt_pieces}")
+                    print(f"Given pieces: {given_pieces}")
+                pool.terminate()
                 return fx, epsilon
 
     if progress_bar:
