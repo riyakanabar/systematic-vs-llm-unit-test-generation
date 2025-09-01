@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-
+#sliding window - heuristic
 def approximate_pc_cons_fx(pc_fx, epsilon):
     optimal_pc_fx = []
     min_val = pc_fx[1][1]  # Initialize min_val value
