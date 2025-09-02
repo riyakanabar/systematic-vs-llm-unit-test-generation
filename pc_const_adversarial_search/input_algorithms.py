@@ -341,5 +341,28 @@ def pc_center_grid_dp(pc_fx, epsilon, centers=None):
     out.append([X[-1], float('inf')])
     return out, len(out)-1, n
 
+def pc_naive_greedy(pc_fx, epsilon):
+    segments = []
+    x_start = pc_fx[1][0]
+    y_val = pc_fx[1][1]
+
+    for i in range(2, len(pc_fx) - 1):
+        yi = pc_fx[i][1]
+        if abs(yi - y_val) > epsilon:
+            # Close previous segment
+            segments.append([x_start, y_val])
+            # Start new segment
+            x_start = pc_fx[i][0]
+            y_val = yi
+        else:
+            # Just average to stay inside epsilon
+            y_val = (y_val + yi) / 2.0
+
+    # Close final segment
+    segments.append([x_start, y_val])
+    segments.append([pc_fx[-1][0], float("inf")])
+
+    return segments, len(segments) - 1, len(pc_fx) - 2
+
 
 

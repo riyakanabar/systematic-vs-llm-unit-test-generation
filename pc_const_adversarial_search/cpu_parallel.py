@@ -9,6 +9,27 @@ from optimal_algorithms.pc_cons_apx import approximate_pc_shortest_path
 from grid_search.variants_test import is_within_epsilon
 from testcase_gen_gs import x_values, y_values, epsilon_values, pieces, count_total_cases
 
+def normalize_pc_fx(pc_fx):
+    """
+    Input format: [[-inf, inf], [x1,y1], ..., [x_n,y_n], [x_{n+1}, inf]]
+    Return same format but with adjacent equal y-values merged.
+    """
+    if len(pc_fx) <= 3:
+        return pc_fx[:]  # nothing to merge
+
+    out = [pc_fx[0]]  # left sentinel
+    # walk interior points; keep only a change in y
+    last_y = pc_fx[1][1]
+    out.append([pc_fx[1][0], last_y])
+
+    for i in range(2, len(pc_fx) - 1):
+        x_i, y_i = pc_fx[i]
+        if y_i != last_y:           # strict inequality; if you want epsilon-equality, use abs(y_i - last_y) <= 1e-12
+            out.append([x_i, y_i])
+            last_y = y_i
+
+    out.append(pc_fx[-1])  # right boundary (x_{n+1}, inf)
+    return out
 
 def generate_test_cases(batch_size=1000):
     """
@@ -70,20 +91,21 @@ def evaluate_test_case_batch(batch, algorithm):
     """
     for pc_cons_fx, epsilon, count in batch:
         # Run the algorithm being tested
-        apx_fx, alg_pieces, _ = algorithm(pc_cons_fx, epsilon)
+        fx_norm = normalize_pc_fx(pc_cons_fx)
+        apx_fx, alg_pieces, _ = algorithm(fx_norm, epsilon)
 
         # Test 1: Check if the approximation is within epsilon
-        if not is_within_epsilon(pc_cons_fx, apx_fx, epsilon):
+        if not is_within_epsilon(fx_norm, apx_fx, epsilon):
             return (
-            True, "epsilon_bound", pc_cons_fx, epsilon, apx_fx, alg_pieces, None, None, None, count)
+            True, "epsilon_bound", fx_norm, epsilon, apx_fx, alg_pieces, None, None, None, count)
 
         # Run the optimal algorithm for comparison
-        optimal_fx, opt_pieces, given_pieces = approximate_pc_shortest_path(pc_cons_fx, epsilon)
+        optimal_fx, opt_pieces, given_pieces = approximate_pc_shortest_path(fx_norm, epsilon)
 
         # Test 2: Check if algorithm uses more pieces than optimal
         if alg_pieces > opt_pieces:
             return (
-            True, "num_pieces", pc_cons_fx, epsilon, apx_fx, alg_pieces, optimal_fx, opt_pieces, given_pieces, count)
+            True, "num_pieces", fx_norm, epsilon, apx_fx, alg_pieces, optimal_fx, opt_pieces, given_pieces, count)
 
     # No counterexample found in this batch
     return (False, "", None, None, None, None, None, None, None, batch[-1][2] if batch else 0)
@@ -134,7 +156,7 @@ def test_algorithm_parallel(algorithm, batch_size=1000):
                     print(f"Optimal pieces: {opt_pieces}")
                     print(f"Given pieces: {given_pieces}")
                 pool.terminate()
-                return fx, epsilon
+                return fx, epsilon, apx_fx, opt_fx
 
     if progress_bar:
         progress_bar.close()
