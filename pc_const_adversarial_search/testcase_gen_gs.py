@@ -6,9 +6,9 @@ from optimal_algorithms.pc_cons_apx import approximate_pc_shortest_path
 from grid_search.variants_test import is_within_epsilon
 import math
 x_values = range(0, 11)
-y_values = range(1, 11)
-epsilon_values = [0.1, 0.25, 0.5, 0.7, 1, 1.5, 2, 3, 5, 7]
-pieces = range(1,11)
+y_values = range(1, 9)
+epsilon_values = [0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 7]
+pieces = range(2,11)
 
 def evaluate_test_case(pc_cons_fx, epsilon, algorithm):
     """
