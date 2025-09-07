@@ -7,7 +7,7 @@ from grid_search.variants_test import is_within_epsilon
 import math
 x_values = range(0, 11)
 y_values = range(1, 9)
-epsilon_values = [0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 7]
+epsilon_values = [0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 6, 7]
 pieces = range(2,11)
 
 def evaluate_test_case(pc_cons_fx, epsilon, algorithm):
@@ -30,28 +30,22 @@ def evaluate_test_case(pc_cons_fx, epsilon, algorithm):
     # PASS
     return False, "", apx_fx, alg_pieces, optimal_num_pieces, optimal_num_pieces, given_num_pieces
 
-def count_total_cases(x_values, y_values, epsilon_values, max_pieces):
+def count_total_cases(x_choices, y_choices, epsilon_choices, pieces):
     """
     Count total number of piecewise-constant test cases analytically.
 
     Args:
-        x_values (int): number of discrete x-positions
-        y_values (int): number of discrete y-values
-        epsilon_values (int): number of epsilon values
-        max_pieces (int): maximum number of pieces to consider
+        x_choices (int): number of discrete x-positions
+        y_choices (int): number of discrete y-values
+        epsilon_choices (int): number of epsilon values
+        pieces (range): pieces to consider
 
     Returns:
         total (int): total number of test cases
     """
     total = 0
-    for m in range(1, max_pieces + 1):
-        # number of ways to pick m breakpoints + 1 boundary from x_values
-        ways_x = math.comb(x_values, m + 1)
-        # number of ways to assign y-values to m pieces
-        ways_y = y_values ** m
-        # total for this m
-        count_m = ways_x * ways_y * epsilon_values
-        total += count_m
+    for m in pieces:  # m = number of pieces
+        total += math.comb(x_choices, m + 1) * (y_choices ** m) * epsilon_choices
     return total
 
 def test_algorithm(algorithm):
@@ -60,7 +54,7 @@ def test_algorithm(algorithm):
     Returns first failing (points, epsilon) or None if none found.
     """
     count = 0
-    total_test_cases = count_total_cases(len(x_values),len(y_values), len(epsilon_values), len(pieces))
+    total_test_cases = count_total_cases(len(x_values),len(y_values), len(epsilon_values), pieces)
     precomputed_x_combinations = {
         num_pieces: list(itertools.combinations(range(len(x_values) - 1), num_pieces))
         for num_pieces in pieces

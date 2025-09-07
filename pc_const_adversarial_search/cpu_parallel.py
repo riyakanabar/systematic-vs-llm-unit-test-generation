@@ -117,7 +117,7 @@ def test_algorithm_parallel(algorithm, batch_size=1000):
     """
     print("Running test_algorithm in parallel...")
     start_time = time.time()
-    total_cases = count_total_cases(len(x_values),len(y_values), len(epsilon_values), len(pieces))
+    total_cases = count_total_cases(len(x_values),len(y_values), len(epsilon_values), pieces)
     print(f"Estimated total test cases: {total_cases}")
     try:
         from tqdm import tqdm
