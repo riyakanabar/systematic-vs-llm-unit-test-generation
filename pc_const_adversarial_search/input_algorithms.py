@@ -233,110 +233,6 @@ def pc_beam_search(pc_fx, epsilon, beam_size=8):
     # Fallback (shouldn't trigger)
     out = [[X[0], Y[0]], [X[-1], float('inf')]]
     return out, len(out)-1, n
-def pc_quantized_rle(pc_fx, epsilon, centers=None):
-    X, Y, n = extract_XY(pc_fx)
-    if centers is None:
-        # use unique sorted Y as candidate centers (or provide your own grid)
-        centers = sorted(set(Y))
-
-    # assign each y_i to nearest center within epsilon; otherwise use y_i itself
-    labels = []
-    for yi in Y:
-        best = None; best_err = float('inf')
-        for c in centers:
-            err = abs(yi - c)
-            if err < best_err:
-                best_err, best = err, c
-        if best is not None and best_err <= epsilon:
-            labels.append(best)
-        else:
-            labels.append(yi)  # fallback: singleton feasible center
-
-    # compress contiguous equal labels into segments
-    out = []
-    cur_c = labels[0]
-    out.append([X[0], float(cur_c)])
-    for i in range(1, n):
-        if labels[i] != cur_c:
-            # before switching, ensure old segment respected L_inf (safety)
-            cur_c = labels[i]
-            out.append([X[i], float(cur_c)])
-    out.append([X[-1], float('inf')])
-    return out, len(out)-1, n
-
-def pc_center_grid_dp(pc_fx, epsilon, centers=None):
-    """
-    Center-Grid DP (CG-DP) for piecewise-constant approximation under L_infinity.
-
-    Input:
-      pc_fx : [[-inf, inf], [x1, y1], ..., [x_n, y_n], [x_{n+1}, inf]]
-      epsilon : tolerance
-      centers : optional list of candidate constants (floats).
-                If None, use sorted unique Y-values (a natural, compact grid).
-
-    Output:
-      out : [[x_start1, c1], ..., [x_{K}, cK], [x_{n+1}, inf]]
-      alg_pieces : K
-      given_pieces : n
-    """
-    X, Y, n = extract_XY(pc_fx)
-    if n == 0:
-        return [[X[-1], float('inf')]], 0, 0
-
-    # Candidate center grid
-    if centers is None:
-        centers = sorted(set(Y))  # compact, data-driven grid
-    C = len(centers)
-
-    # Precompute, for each (i, c_idx), the furthest j >= i such that all t in [i..j] satisfy |Y[t]-centers[c_idx]| <= epsilon.
-    furthest = [[-1]*n for _ in range(C)]
-    for ci, c in enumerate(centers):
-        j = 0
-        for i in range(n):
-            if j < i:
-                j = i
-            # advance j while feasible for center c
-            while j < n and abs(Y[j] - c) <= epsilon:
-                j += 1
-            furthest[ci][i] = j-1 if j > i else (i-1)  # j-1 is last feasible; if infeasible at i, set i-1
-
-    # DP: dp[i] = minimal segments to cover indices [i..n-1].
-    INF = 10**9
-    dp = [INF]*(n+1)
-    nxt = [(-1, -1)]*(n+1)  # (next_start_index, center_idx) choice
-    dp[n] = 0  # base: nothing to cover
-
-    for i in range(n-1, -1, -1):
-        best_cost = INF
-        best_choice = (-1, -1)
-        for ci in range(C):
-            j = furthest[ci][i]
-            if j < i:
-                continue  # center ci cannot start at i
-            cost = 1 + dp[j+1]
-            if cost < best_cost:
-                best_cost = cost
-                best_choice = (j+1, ci)  # next start is j+1
-        dp[i] = best_cost
-        nxt[i] = best_choice
-
-    # Reconstruct segmentation
-    out = []
-    i = 0
-    while i < n:
-        j1, ci = nxt[i]
-        if j1 == -1:
-            # No feasible center at i; fall back to singleton segment at Yi
-            c = Y[i]
-            out.append([X[i], float(c)])
-            i += 1
-            continue
-        c = centers[ci]
-        out.append([X[i], float(c)])
-        i = j1
-
-    out.append([X[-1], float('inf')])
-    return out, len(out)-1, n
 
 def recursive_split2(pc_fx, epsilon):
     # Extract interior grid
@@ -374,5 +270,175 @@ def recursive_split2(pc_fx, epsilon):
     segs.append([X[-1], float('inf')])
     return segs, len(segs) - 1, n
 
+from math import inf
+from typing import List, Tuple
+import heapq
 
+Piece = Tuple[float, float]  # (x_i, y_i) for the i-th true piece (left endpoint, value)
+
+def _extract_pieces(pc_fx: List[Tuple[float, float]]) -> List[Piece]:
+    """Remove boundary sentinels and return [(x1,y1),...,(xn,yn)]."""
+    assert len(pc_fx) >= 3, "pc_fx must have at least (-inf,inf), one piece, and (x_{n+1}, inf)"
+    return pc_fx[1:-1]
+
+def _to_output(pieces: List[Piece], x_right: float) -> List[Tuple[float, float]]:
+    """Convert back to sentinel format [(-inf,inf), (x1,y1),...,(xm,ym), (x_{m+1}, inf)]."""
+    if not pieces:
+        # Degenerate case: no pieces -> return a single dummy piece at -inf (rare in practice)
+        return [(-inf, inf), (x_right, 0.0)]
+    out = [(-inf, inf)]
+    out.extend(pieces)
+    out.append((x_right, inf))
+    return out
+
+
+def _count_original_pieces(pc_fx: List[Tuple[float, float]]) -> int:
+    return max(0, len(pc_fx) - 2)
+
+# ========== 6) Bottom-Up Agglomerative by Smallest Y-Spread ==========
+# Strategy: repeatedly merge the adjacent pair whose combined y-range (max-min) is the smallest
+#           subject to (max-min) ≤ 2ε (feasible). Stops when no pair can be merged.
+# Complexity: O(n log n) using a heap; updates only near merges.
+def alg6_agglomerative_yspread(pc_fx: List[Tuple[float, float]], eps: float):
+    pieces = _extract_pieces(pc_fx)
+    n = len(pieces)
+    ys = [y for _, y in pieces]
+    alive = [True]*n
+
+    # Store (spread, i) for adjacent (i,i+1)
+    def spread(i):
+        if i < 0 or i >= n-1 or not alive[i] or not alive[i+1]:
+            return None
+        lo = min(ys[i], ys[i+1])
+        hi = max(ys[i], ys[i+1])
+        w = hi - lo
+        return w if w <= 2*eps else None
+
+    heap = []
+    for i in range(n-1):
+        s = spread(i)
+        if s is not None:
+            heapq.heappush(heap, (s, i))
+
+    # We’ll just mark j dead and keep y[i] as the merged representative, but clamp it later.
+    while heap:
+        s, i = heapq.heappop(heap)
+        if s is None or not alive[i]:
+            continue
+        j = i+1
+        while j < n and not alive[j]:
+            j += 1
+        if j >= n or not alive[j]:
+            continue
+        # Verify current spread is still feasible
+        lo = min(ys[i], ys[j])
+        hi = max(ys[i], ys[j])
+        if hi - lo <= 2*eps:
+            # merge j into i, keep ys[i] as representative (final value will be clamped)
+            alive[j] = False
+            # try to merge (i-1,i) and (i,i+1) next
+            for k in (i-1, i):
+                if 0 <= k < n-1:
+                    s2 = spread(k)
+                    if s2 is not None:
+                        heapq.heappush(heap, (s2, k))
+
+    # Build bands per live block by scanning and intersecting
+    out = []
+    i = 0
+    while i < n:
+        if not alive[i]:
+            i += 1
+            continue
+        # start block
+        lo, hi = ys[i] - eps, ys[i] + eps
+        x_left = pieces[i][0]
+        j = i + 1
+        while j < n and not alive[j]:
+            # merged into i; update band with their eps bands to remain valid
+            yj = ys[j]
+            lo = max(lo, yj - eps)
+            hi = min(hi, yj + eps)
+            j += 1
+        val = (lo + hi) / 2.0
+        out.append((x_left, val))
+        i = j
+    return _to_output(out, pc_fx[-1][0]), len(out), _count_original_pieces(pc_fx)
+
+# ========== 7) Beam Search (Width B) on Split Positions ==========
+# Strategy: keep up to B partial segmentations while scanning left-to-right. At each step, either
+#           extend the current block if feasible or start a new block. Rank partial solutions by (pieces_so_far, -reach).
+# Complexity: O(B * n)
+def alg7_beam_search(pc_fx: List[Tuple[float, float]], eps: float, B: int = 4):
+    pieces = _extract_pieces(pc_fx)
+    n = len(pieces)
+    # state = (i, x_left, lo, hi, pieces_list)
+    beam = [(0, pieces[0][0], pieces[0][1]-eps, pieces[0][1]+eps, [])]  # start before emitting
+    for idx in range(1, n):
+        y = pieces[idx][1]
+        lo2, hi2 = y - eps, y + eps
+        new_beam = []
+        for _, x_left, lo, hi, plist in beam:
+            # Option A: extend
+            loE, hiE = max(lo, lo2), min(hi, hi2)
+            if loE <= hiE:
+                new_beam.append((len(plist), x_left, loE, hiE, plist[:]))
+            # Option B: close previous and start new at idx-1
+            val = (lo + hi) / 2.0
+            plistB = plist[:] + [(x_left, val)]
+            new_beam.append((len(plistB), pieces[idx][0], lo2, hi2, plistB))
+        # keep best B states by (pieces_so_far, widest current band)
+        new_beam.sort(key=lambda s: (s[0], -(s[3]-s[2])))
+        beam = new_beam[:B]
+    # Close each and pick best
+    candidates = []
+    for pieces_so_far, x_left, lo, hi, plist in beam:
+        val = (lo + hi) / 2.0
+        cand = plist + [(x_left, val)]
+        candidates.append(cand)
+    out = min(candidates, key=len)
+    return _to_output(out, pc_fx[-1][0]), len(out), _count_original_pieces(pc_fx)
+
+# ========== 8) Pruned Dynamic Programming (Feasible-Window) ==========
+# Strategy: DP[i] = min pieces to cover first i segments.
+#           Transition: choose j<i such that the block [j..i-1] is feasible (band intersection non-empty).
+#           We prune by stopping leftward expansion once y-range exceeds 2ε (common early-stop).
+# Complexity: O(n^2) worst case, typically much less with pruning.
+def alg8_pruned_dp(pc_fx: List[Tuple[float, float]], eps: float):
+    pieces = _extract_pieces(pc_fx)
+    n = len(pieces)
+    INF = 10**9
+    dp = [INF]*(n+1)
+    prev = [-1]*(n+1)
+    dp[0] = 0
+    for i in range(1, n+1):
+        lo, hi = pieces[i-1][1] - eps, pieces[i-1][1] + eps
+        j = i-1
+        while j >= 0:
+            # block [j..i-1]
+            if j < i-1:
+                y = pieces[j][1]
+                lo, hi = max(lo, y - eps), min(hi, y + eps)
+            if lo > hi:
+                break  # further left will only widen the y-span; safe prune
+            if dp[j] + 1 < dp[i]:
+                dp[i] = dp[j] + 1
+                prev[i] = j
+            j -= 1
+    # Reconstruct
+    out = []
+    i = n
+    while i > 0:
+        j = prev[i]
+        # compute final band for [j..i-1]
+        lo, hi = -inf, inf
+        for k in range(j, i):
+            y = pieces[k][1]
+            lo = max(lo, y - eps)
+            hi = min(hi, y + eps)
+        val = (lo + hi) / 2.0
+        out.append((pieces[j][0], val))
+        i = j
+    out.reverse()
+    return _to_output(out, pc_fx[-1][0]), len(out), _count_original_pieces(pc_fx)
 
