@@ -2,6 +2,9 @@ from grid_search.get_variants import variant_function, loop_variations
 import functools
 import operator
 import numpy as np
+from math import inf
+from typing import List, Tuple
+import heapq
 
 #standard optimal algorithm - not a variant
 variant0 = functools.partial(
@@ -85,7 +88,7 @@ def extract_XY(pc_fx):
     Y = [pc_fx[j][1] for j in range(1, n+1)]
     return X, Y, n
 
-def pc_lookahead_split(pc_fx, epsilon):
+def lookahead_split(pc_fx, epsilon):
     X, Y, n = extract_XY(pc_fx)
     out = []
     i = 0
@@ -94,7 +97,8 @@ def pc_lookahead_split(pc_fx, epsilon):
         j = i + 1
         while j < n:
             vmin2 = min(vmin, Y[j]); vmax2 = max(vmax, Y[j])
-            if vmax2 - vmin2 <= 2*epsilon:
+            #if vmax2 - vmin2 <= 2 * epsilon:
+            if np.isclose(vmax2, vmin2, atol=2*epsilon, rtol=1e-9):
                 vmin, vmax = vmin2, vmax2
                 j += 1
             else:
@@ -119,7 +123,7 @@ def pc_lookahead_split(pc_fx, epsilon):
     out.append([X[-1], float('inf')])
     return out, len(out)-1, n
 
-def pc_binary_split(pc_fx, epsilon):
+def binary_split(pc_fx, epsilon):
     X, Y, n = extract_XY(pc_fx)
 
     def best_split(i, j):
@@ -149,7 +153,7 @@ def pc_binary_split(pc_fx, epsilon):
     while stack:
         i, j = stack.pop()
         vmin = min(Y[i:j+1]); vmax = max(Y[i:j+1])
-        if vmax - vmin <= 2*epsilon:
+        if np.isclose(vmax, vmin, atol=2 * epsilon, rtol=1e-9):
             c = 0.5*(vmin + vmax)
             segments.append((i, j, c))
         else:
@@ -163,7 +167,8 @@ def pc_binary_split(pc_fx, epsilon):
     out.append([X[-1], float('inf')])
     return out, len(out)-1, n
 
-def pc_beam_search(pc_fx, epsilon, beam_size=8):
+#TOL = 1e-12
+def beam_search(pc_fx, epsilon, beam_size=8):
     X, Y, n = extract_XY(pc_fx)
 
     # precompute feasibility: furthest j you can reach from i
@@ -173,7 +178,8 @@ def pc_beam_search(pc_fx, epsilon, beam_size=8):
         j = i
         while j < n:
             vmin = min(vmin, Y[j]); vmax = max(vmax, Y[j])
-            if vmax - vmin <= 2*epsilon:
+            #if (vmax - vmin) <= (2 * epsilon + TOL * max(1.0, abs(vmax), abs(vmin))):
+            if np.isclose(vmax, vmin, atol=2*epsilon, rtol=1e-9):
                 j += 1
             else:
                 break
@@ -249,7 +255,8 @@ def recursive_split2(pc_fx, epsilon):
         mn, mx = float(np.min(seg)), float(np.max(seg))
 
         # Base case: ε-feasible -> emit midpoint, guaranteed max error ≤ ε
-        if mx - mn <= 2.0 * epsilon:
+        if np.isclose(mx, mn, atol=2 * epsilon, rtol=1e-9):
+        #if mx - mn <= 2.0 * epsilon:
             return [[X[i], 0.5 * (mn + mx)]]
 
         # Choose a split index s in (i..j) (prefer point of largest deviation from current midpoint)
@@ -270,9 +277,7 @@ def recursive_split2(pc_fx, epsilon):
     segs.append([X[-1], float('inf')])
     return segs, len(segs) - 1, n
 
-from math import inf
-from typing import List, Tuple
-import heapq
+
 
 Piece = Tuple[float, float]  # (x_i, y_i) for the i-th true piece (left endpoint, value)
 
@@ -299,7 +304,7 @@ def _count_original_pieces(pc_fx: List[Tuple[float, float]]) -> int:
 # Strategy: repeatedly merge the adjacent pair whose combined y-range (max-min) is the smallest
 #           subject to (max-min) ≤ 2ε (feasible). Stops when no pair can be merged.
 # Complexity: O(n log n) using a heap; updates only near merges.
-def alg6_agglomerative_yspread(pc_fx: List[Tuple[float, float]], eps: float):
+def agglomerative_yspread(pc_fx: List[Tuple[float, float]], eps: float):
     pieces = _extract_pieces(pc_fx)
     n = len(pieces)
     ys = [y for _, y in pieces]
@@ -312,7 +317,7 @@ def alg6_agglomerative_yspread(pc_fx: List[Tuple[float, float]], eps: float):
         lo = min(ys[i], ys[i+1])
         hi = max(ys[i], ys[i+1])
         w = hi - lo
-        return w if w <= 2*eps else None
+        return w if np.isclose(hi, lo, atol=2*eps, rtol=1e-9) else None
 
     heap = []
     for i in range(n-1):
@@ -333,7 +338,7 @@ def alg6_agglomerative_yspread(pc_fx: List[Tuple[float, float]], eps: float):
         # Verify current spread is still feasible
         lo = min(ys[i], ys[j])
         hi = max(ys[i], ys[j])
-        if hi - lo <= 2*eps:
+        if np.isclose(hi, lo, atol=2*eps, rtol=1e-9):
             # merge j into i, keep ys[i] as representative (final value will be clamped)
             alive[j] = False
             # try to merge (i-1,i) and (i,i+1) next
@@ -369,6 +374,7 @@ def alg6_agglomerative_yspread(pc_fx: List[Tuple[float, float]], eps: float):
 # Strategy: keep up to B partial segmentations while scanning left-to-right. At each step, either
 #           extend the current block if feasible or start a new block. Rank partial solutions by (pieces_so_far, -reach).
 # Complexity: O(B * n)
+
 def alg7_beam_search(pc_fx: List[Tuple[float, float]], eps: float, B: int = 4):
     pieces = _extract_pieces(pc_fx)
     n = len(pieces)
@@ -404,7 +410,7 @@ def alg7_beam_search(pc_fx: List[Tuple[float, float]], eps: float, B: int = 4):
 #           Transition: choose j<i such that the block [j..i-1] is feasible (band intersection non-empty).
 #           We prune by stopping leftward expansion once y-range exceeds 2ε (common early-stop).
 # Complexity: O(n^2) worst case, typically much less with pruning.
-def alg8_pruned_dp(pc_fx: List[Tuple[float, float]], eps: float):
+def pruned_dp(pc_fx: List[Tuple[float, float]], eps: float):
     pieces = _extract_pieces(pc_fx)
     n = len(pieces)
     INF = 10**9
@@ -442,3 +448,6 @@ def alg8_pruned_dp(pc_fx: List[Tuple[float, float]], eps: float):
     out.reverse()
     return _to_output(out, pc_fx[-1][0]), len(out), _count_original_pieces(pc_fx)
 
+candidate_algorithms = [variant1, variant2, variant3, recursive_split1, recursive_split2, lookahead_split,
+                        agglomerative_yspread, binary_split, beam_search, pruned_dp]
+algs = [variant1]
