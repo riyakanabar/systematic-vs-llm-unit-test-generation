@@ -7,35 +7,35 @@ from typing import List, Tuple
 import heapq
 
 #standard optimal algorithm - not a variant
-variant0 = functools.partial(
-        variant_function,
-        loop_behavior=loop_variations[0],
-        params_min=[1,1,1,1,-1],
-        params_max=[1,1,1,1,1],
-        condition_params=[operator.ge, operator.ge, operator.le]
-    )
-
-variant1 = functools.partial(
-        variant_function,
-        loop_behavior=loop_variations[1],
-        params_min=[1,2,1,2,-1],
-        params_max=[1,1,1,1,1], #standard
-        condition_params=[operator.ge, operator.ge, operator.le] #standard
-    )
-variant2 = functools.partial(
-        variant_function,
-        loop_behavior=loop_variations[1],
-        params_min=[1,1,1,1,-1], #standard
-        params_max=[1,1,1,1,1], #standard
-        condition_params=[operator.ge, operator.ge, operator.le] #standard
-    )
-variant3 = functools.partial(
-        variant_function,
-        loop_behavior=loop_variations[2],
-        params_min=[1,1,1,1,-1], #standard
-        params_max=[1,1,1,1,1], #standard
-        condition_params=[operator.ge, operator.ge, operator.le] #standard
-    )
+# variant0 = functools.partial(
+#         variant_function,
+#         loop_behavior=loop_variations[0],
+#         params_min=[1,1,1,1,-1],
+#         params_max=[1,1,1,1,1],
+#         condition_params=[operator.ge, operator.ge, operator.le]
+#     )
+#
+# variant1 = functools.partial(
+#         variant_function,
+#         loop_behavior=loop_variations[1],
+#         params_min=[1,2,1,2,-1],
+#         params_max=[1,1,1,1,1], #standard
+#         condition_params=[operator.ge, operator.ge, operator.le] #standard
+#     )
+# variant2 = functools.partial(
+#         variant_function,
+#         loop_behavior=loop_variations[1],
+#         params_min=[1,1,1,1,-1], #standard
+#         params_max=[1,1,1,1,1], #standard
+#         condition_params=[operator.ge, operator.ge, operator.le] #standard
+#     )
+# variant3 = functools.partial(
+#         variant_function,
+#         loop_behavior=loop_variations[2],
+#         params_min=[1,1,1,1,-1], #standard
+#         params_max=[1,1,1,1,1], #standard
+#         condition_params=[operator.ge, operator.ge, operator.le] #standard
+#     )
 
 def recursive_split1(pc_fx, epsilon):
         """
@@ -448,6 +448,5 @@ def pruned_dp(pc_fx: List[Tuple[float, float]], eps: float):
     out.reverse()
     return _to_output(out, pc_fx[-1][0]), len(out), _count_original_pieces(pc_fx)
 
-candidate_algorithms = [variant1, variant2, variant3, recursive_split1, recursive_split2, lookahead_split,
+candidate_algorithms = [recursive_split1, recursive_split2, lookahead_split,
                         agglomerative_yspread, binary_split, beam_search, pruned_dp]
-algs = [variant1]

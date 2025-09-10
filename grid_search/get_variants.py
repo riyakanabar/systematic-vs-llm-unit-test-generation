@@ -27,7 +27,8 @@ loop_variations = [left_to_right, lowest_to_highest, highest_to_lowest]
 # Linear-absolute function
 def m(x, y, v):
     a, b, c, d, alpha = v
-    return (a * x + b * y + alpha * abs(c * x - d * y)) / 2
+    result = (a * x + b * y + alpha * abs(c * x - d * y)) / 2
+    return round(result, 2)
 
 # Condition wrapper
 def cond(a, b, op):
@@ -40,8 +41,10 @@ def variant_function(pc_fx, epsilon, loop_behavior, params_min, params_max, cond
     n = len(pc_fx_traversal_order)
     U = [pc_fx_traversal_order[i][1] + epsilon for i in range(n)]
     L = [pc_fx_traversal_order[i][1] - epsilon for i in range(n)]
+    U = [round(u, 2) for u in U]
+    L = [round(l, 2) for l in L]
+    #print(f"U: {U} and L: {L}")
     op1, op2, op3 = condition_params
-
     i = 0
     optimal_num_pieces = 0
     while i < n:
@@ -72,7 +75,6 @@ def variant_function(pc_fx, epsilon, loop_behavior, params_min, params_max, cond
             i += 1
         else:
             i = k - 1
-
     optimal_pc_fx.append([pc_fx[-1][0], float('inf')])
     given_num_pieces = len(pc_fx) - 2
     return optimal_pc_fx, optimal_num_pieces, given_num_pieces
