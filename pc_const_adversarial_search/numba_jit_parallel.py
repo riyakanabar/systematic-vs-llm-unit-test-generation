@@ -20,8 +20,8 @@ from grid_search.variants_test import is_within_epsilon as original_is_within_ep
 # CONFIG
 # -----------------------
 # Convert to numpy arrays for better performance with Numba
-x_values = np.arange(0, 6, dtype=np.float64)  # 0..10 (11 grid points)
-y_values = np.arange(1, 5, dtype=np.float64)  # 1..8
+x_values = np.arange(0, 7, dtype=np.float64)  # 0..10 (11 grid points)
+y_values = np.arange(1, 9, dtype=np.float64)  # 1..8
 epsilon_values = np.array([0.5, 0.75, 1, 1.5, 7], dtype=np.float64)
 pieces_range = np.arange(2, 6, dtype=np.int64)  # number of pieces m = 2..10
 
@@ -291,7 +291,7 @@ def process_batch(args):
 
         # Process the test case
         test1, test2 = process_test_case(points_np, eps_float)
-        
+
         # Update counters
         if test1:
             epsilon_fail += 1
