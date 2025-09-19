@@ -1,6 +1,8 @@
 import numpy as np
+from numba import njit
 import matplotlib.pyplot as plt
 #sliding window - heuristic
+
 def approximate_pc_cons_fx(pc_fx, epsilon):
     optimal_pc_fx = []
     min_val = pc_fx[1][1]  # Initialize min_val value
@@ -32,7 +34,7 @@ def approximate_pc_cons_fx(pc_fx, epsilon):
     optimal_num_pieces = len(optimal_pc_fx) - 1
     given_num_pieces = len(pc_fx) - 2
     return optimal_pc_fx, optimal_num_pieces, given_num_pieces
-
+@njit(cache=True)
 def approximate_pc_shortest_path(pc_fx, epsilon):
     optimal_pc_fx = []
     n = len(pc_fx) - 2  # Excluding boundary points
