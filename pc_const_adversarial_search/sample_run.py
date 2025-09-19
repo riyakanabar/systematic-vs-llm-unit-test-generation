@@ -1,6 +1,6 @@
-from input_algorithms import variant1
-from testcase_gen_gs import test_algorithm
+from input_algorithms import recursive_split1
+from numba_jit_parallel import test_algorithm
 
 if __name__ == "__main__":
-    test_algorithm(variant1)
+    test_algorithm(recursive_split1)
 
