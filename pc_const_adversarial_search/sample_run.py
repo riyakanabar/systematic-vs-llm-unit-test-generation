@@ -1,3 +1,6 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from input_algorithms import recursive_split1
 from numba_jit_parallel import test_algorithm
 

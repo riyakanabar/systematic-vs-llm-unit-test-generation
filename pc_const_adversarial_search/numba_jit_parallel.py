@@ -145,10 +145,6 @@ def test_algorithm(algorithm):
                     apx_fx, alg_pieces, _ = algorithm(points, eps)
                     optimal_pc_fx, optimal_num_pieces, given_num_pieces = approximate_pc_shortest_path(points,eps)
 
-                    failed, reason, apx_fx, alg_pieces, opt_fx, opt_pieces, given_pieces = evaluate_test_case(
-                        points, eps, algorithm
-                    )
-
                     test1 = not is_within_epsilon(points, apx_fx, eps)
                     test2 = alg_pieces > optimal_num_pieces
 
