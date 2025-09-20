@@ -35,6 +35,67 @@ def approximate_pc_cons_fx(pc_fx, epsilon):
     given_num_pieces = len(pc_fx) - 2
     return optimal_pc_fx, optimal_num_pieces, given_num_pieces
 
+import numpy as np
+from numba import njit
+
+@njit
+def numba_approximate_pc_shortest_path(pc_fx, epsilon):
+    """
+    Numba-friendly version.
+    pc_fx: numpy array of shape (n+2, 2), with boundary points included
+    epsilon: float
+    """
+    n = pc_fx.shape[0] - 2  # exclude boundaries
+
+    # Precompute bounds
+    U = np.empty(n, dtype=np.float64)
+    L = np.empty(n, dtype=np.float64)
+    for j in range(n):
+        U[j] = pc_fx[j+1, 1] + epsilon
+        L[j] = pc_fx[j+1, 1] - epsilon
+
+    # Preallocate results (worst case = n+1 points)
+    out_x = np.empty(n+1, dtype=np.float64)
+    out_y = np.empty(n+1, dtype=np.float64)
+    m = 0
+
+    i = 0
+    while i < n:
+        U_max = np.inf
+        L_min = -np.inf
+        k = i + 1
+
+        while k <= n:
+            new_U_max = U[k-1] if U[k-1] < U_max else U_max
+            new_L_min = L[k-1] if L[k-1] > L_min else L_min
+
+            if (new_U_max >= new_L_min) and (U[i] >= new_L_min) and (L[i] <= new_U_max):
+                U_max = new_U_max
+                L_min = new_L_min
+                k += 1
+            else:
+                break
+
+        # store segment
+        out_x[m] = pc_fx[i+1, 0]
+        out_y[m] = 0.5 * (U_max + L_min)
+        m += 1
+
+        i = k - 1
+
+    # Append last boundary
+    out_x[m] = pc_fx[-1, 0]
+    out_y[m] = np.inf
+    m += 1
+
+    # Slice to actual size
+    optimal_pc_fx = np.empty((m, 2), dtype=np.float64)
+    for t in range(m):
+        optimal_pc_fx[t, 0] = out_x[t]
+        optimal_pc_fx[t, 1] = out_y[t]
+
+    return optimal_pc_fx, m-1, n
+
 def approximate_pc_shortest_path(pc_fx, epsilon):
     optimal_pc_fx = []
     n = len(pc_fx) - 2  # Excluding boundary points
