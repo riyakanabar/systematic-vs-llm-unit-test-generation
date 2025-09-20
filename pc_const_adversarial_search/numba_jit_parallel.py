@@ -14,10 +14,10 @@ from numba import njit
 # -----------------------
 # CONFIG
 # -----------------------
-x_values = list(range(0, 9))             # 0..10 (11 grid points)
+x_values = list(range(0, 11))             # 0..10 (11 grid points)
 y_values = list(range(1, 9))              # 1..8
-epsilon_values = [0.5, 0.75, 1, 2, 4, 7]
-pieces_range = range(2, 7)               # number of pieces m = 2..10
+epsilon_values = [0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 6, 7]
+pieces_range = range(2, 11)               # number of pieces m = 2..10
 
 
 
@@ -238,18 +238,33 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import numpy as np
 
-# ---- You should already have these fast/JITed: ----
-# from yourmodule import approximate_pc_shortest_path
-# from yourmodule import numba_is_within_epsilon
-# from yourmodule import x_values, y_values, epsilon_values, pieces_range, x_combos
 
 # ------------- Worker -----------------
+_worker_warmed_up = False
 def _worker_batch(args):
     """
     Processes a batch of y-tuples for one (m, eps, indices) combo.
     Returns partial counts: (tested, eps_fail, opt_fail, total_fail)
     """
+    global _worker_warmed_up
     (m, eps, trans_indices, boundary_idx, y_batch, x_as_float, algorithm) = args
+
+    # ---------------- Warm-up ----------------
+    if not _worker_warmed_up:
+        dummy_points = np.array(
+            [[-float('inf'), float('inf')],
+             [0.0, 5.0], [2.0, 1.0],
+             [4.0, float('inf')]], dtype=np.float64
+        )
+        dummy_apx = np.array(
+            [[0.0, 5.0],
+             [4.0, float('inf')]], dtype=np.float64
+        )
+        # Trigger Numba compilation
+        _ = numba_is_within_epsilon(dummy_points, dummy_apx, 0.1)
+        _ = numba_approximate_pc_shortest_path(dummy_points, 0.1)
+        _worker_warmed_up = True
+    # ------------------------------------------
 
     tested = 0
     epsilon_fail = 0
@@ -301,7 +316,7 @@ def _batched(iterable, batch_size):
 # ------------- Parallel driver -----------------
 def test_algorithm_parallel(algorithm,
                             max_workers=None,
-                            batch_size=2000,
+                            batch_size=100000,
                             show_progress=True):
     """
     Parallel version of test_algorithm using ProcessPoolExecutor with batching.
