@@ -238,16 +238,30 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import numpy as np
 
+import itertools
+import math
+import os
+import sys
+import numpy as np
+from concurrent.futures import ProcessPoolExecutor
+from numba import njit
 
-# ------------- Worker -----------------
+
+
+        
+
+
+
+# ---------------- Worker ----------------
 _worker_warmed_up = False
-def _worker_batch(args):
+def _worker_chunk(args):
     """
-    Processes a batch of y-tuples for one (m, eps, indices) combo.
-    Returns partial counts: (tested, eps_fail, opt_fail, total_fail)
+    Process a chunk of y-tuples for one (m, eps, indices) config.
+    Only stores the slice (start, end) not the full y_batch.
     """
     global _worker_warmed_up
-    (m, eps, trans_indices, boundary_idx, y_batch, x_as_float, algorithm) = args
+    (m, eps, trans_indices, boundary_idx, y_range, x_as_float, algorithm) = args
+    start, end = y_range
 
     # ---------------- Warm-up ----------------
     if not _worker_warmed_up:
@@ -260,144 +274,85 @@ def _worker_batch(args):
             [[0.0, 5.0],
              [4.0, float('inf')]], dtype=np.float64
         )
-        # Trigger Numba compilation
         _ = numba_is_within_epsilon(dummy_points, dummy_apx, 0.1)
         _ = numba_approximate_pc_shortest_path(dummy_points, 0.1)
         _worker_warmed_up = True
     # ------------------------------------------
 
-    tested = 0
-    epsilon_fail = 0
-    optimality_fail = 0
-    total_fail = 0
-
+    tested = epsilon_fail = optimality_fail = total_fail = 0
     trans_xs = [x_as_float[i] for i in trans_indices]
     right_boundary_x = x_as_float[boundary_idx]
 
-    for y_tuple in y_batch:
-        # Assemble testcase
+    # regenerate product lazily
+    y_iter = itertools.islice(itertools.product(y_values, repeat=m), start, end)
+    for y_tuple in y_iter:
         points = [[-float('inf'), float('inf')]]
         for xx, yy in zip(trans_xs, y_tuple):
             points.append([xx, yy])
         points.append([right_boundary_x, float('inf')])
-
         points = np.array(points, dtype=np.float64)
 
         # Candidate algo
         apx_fx, alg_pieces, _ = algorithm(points, eps)
-
-        # Oracle optimal (piece count) for comparison
+        # Oracle
         optimal_pc_fx, optimal_num_pieces, given_num_pieces = numba_approximate_pc_shortest_path(points, eps)
 
-        # Tests
-        test1 = not numba_is_within_epsilon(points, apx_fx, eps)         # ε-feasibility
-        test2 = (alg_pieces > optimal_num_pieces)                        # optimality
+        test1 = not numba_is_within_epsilon(points, apx_fx, eps)
+        test2 = (alg_pieces > optimal_num_pieces)
 
-        if test1:
-            epsilon_fail += 1
-        if test2:
-            optimality_fail += 1
-        if test1 or test2:
-            total_fail += 1
+        if test1: epsilon_fail += 1
+        if test2: optimality_fail += 1
+        if test1 or test2: total_fail += 1
         tested += 1
 
     return tested, epsilon_fail, optimality_fail, total_fail
 
-# ------------- Batching helper -----------------
-def _batched(iterable, batch_size):
-    """Yield lists of length up to batch_size from iterable."""
-    it = iter(iterable)
-    while True:
-        batch = list(itertools.islice(it, batch_size))
-        if not batch:
-            break
-        yield batch
-
-# ------------- Parallel driver -----------------
+# ---------------- Parallel driver ----------------
 def test_algorithm_parallel(algorithm,
                             max_workers=None,
-                            batch_size=100000,
+                            chunk_size=50_000,
                             show_progress=True):
     """
-    Parallel version of test_algorithm using ProcessPoolExecutor with batching.
-
-    max_workers: int|None  -> defaults to os.cpu_count()
-    batch_size:  size of each y-product batch turned into one task
+    Parallel version of test_algorithm using ProcessPoolExecutor with streaming.
+    Does not store all configs or batches.
     """
 
-    # Optional progress bar
     try:
         from tqdm import tqdm
         pbar = tqdm(desc="Testing", unit="case") if show_progress else None
     except ImportError:
         pbar = None
 
-    # Preconvert to floats once
     x_as_float = [float(v) for v in x_values]
-    y_as_float = [float(v) for v in y_values]
 
-    # Stats
-    tested = 0
-    epsilon_fail = 0
-    optimality_fail = 0
-    total_fail = 0
-
+    tested = epsilon_fail = optimality_fail = total_fail = 0
     total_theoretical = count_total_cases(len(x_values), len(y_values), len(epsilon_values), pieces_range)
     print(f"Theoretical total test cases (full grid): {total_theoretical:,}")
 
-    # Tip: avoid thread oversubscription if your JIT code also uses threads
-    # os.environ.setdefault("NUMBA_NUM_THREADS", "1")
-    # os.environ.setdefault("OMP_NUM_THREADS", "1")
-
-    futures = []
-    with ProcessPoolExecutor(max_workers=max_workers) as ex:
+    def task_generator():
         for m in pieces_range:
             for eps in epsilon_values:
                 for indices in x_combos(m + 1):
                     trans_indices = indices[:-1]
                     boundary_idx = indices[-1]
+                    total_y = len(y_values) ** m
+                    for start in range(0, total_y, chunk_size):
+                        end = min(start + chunk_size, total_y)
+                        yield (m, eps, trans_indices, boundary_idx, (start, end), x_as_float, algorithm)
 
-                    # Huge cartesian product -> chunk it
-                    y_iter = itertools.product(y_as_float, repeat=m)
+    with ProcessPoolExecutor(max_workers=max_workers) as ex:
+        for t, e1, e2, tf in ex.map(_worker_chunk, task_generator(), chunksize=1):
+            tested += t
+            epsilon_fail += e1
+            optimality_fail += e2
+            total_fail += tf
+            if pbar is not None: pbar.update(t)
 
-                    for y_batch in _batched(y_iter, batch_size):
-                        args = (m, eps, trans_indices, boundary_idx, y_batch, x_as_float,algorithm)
-                        futures.append(ex.submit(_worker_batch, args))
+    if pbar is not None: pbar.close()
 
-        # Collect results
-        if pbar is None:
-            for fut in as_completed(futures):
-                t, e1, e2, tf = fut.result()
-                tested += t
-                epsilon_fail += e1
-                optimality_fail += e2
-                total_fail += tf
-        else:
-            for fut in as_completed(futures):
-                t, e1, e2, tf = fut.result()
-                tested += t
-                epsilon_fail += e1
-                optimality_fail += e2
-                total_fail += tf
-                pbar.update(t)
-
-    if pbar is not None:
-        pbar.close()
-
-    if tested == 0:
-        print("No testcases were generated.")
-        return {
-            "tested": 0,
-            "epsilon_fail": 0,
-            "optimality_fail": 0,
-            "epsilon_fail_pct": 0.0,
-            "optimality_fail_pct": 0.0,
-            "total_fail_pct": 0.0,
-        }
-
-    epsilon_fail_pct = 100.0 * epsilon_fail / tested
-    optimality_fail_pct = 100.0 * optimality_fail / tested
-    total_fail_pct = 100.0 * total_fail / tested
+    epsilon_fail_pct = 100.0 * epsilon_fail / tested if tested else 0.0
+    optimality_fail_pct = 100.0 * optimality_fail / tested if tested else 0.0
+    total_fail_pct = 100.0 * total_fail / tested if tested else 0.0
 
     print("\n=== RESULTS (parallel) ===")
     print(f"Tested cases:        {tested:,}")
@@ -413,3 +368,5 @@ def test_algorithm_parallel(algorithm,
         "optimality_fail_pct": optimality_fail_pct,
         "total_fail_pct": total_fail_pct,
     }
+
+
