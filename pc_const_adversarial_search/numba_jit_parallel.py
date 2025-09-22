@@ -310,7 +310,7 @@ def _worker_chunk(args):
 # ---------------- Parallel driver ----------------
 def test_algorithm_parallel(algorithm,
                             max_workers=None,
-                            chunk_size=50_000,
+                            chunk_size=500000,
                             show_progress=True):
     """
     Parallel version of test_algorithm using ProcessPoolExecutor with streaming.
@@ -356,9 +356,9 @@ def test_algorithm_parallel(algorithm,
 
     print("\n=== RESULTS (parallel) ===")
     print(f"Tested cases:        {tested:,}")
-    print(f"Epsilon failures:    {epsilon_fail}  ({epsilon_fail_pct:.3f}%)")
-    print(f"Optimality failures: {optimality_fail}  ({optimality_fail_pct:.3f}%)")
-    print(f"Total failure rate:  {total_fail}  ({total_fail_pct:.3f}%)")
+    print(f"Epsilon failures:    {epsilon_fail}  ({epsilon_fail_pct:.1f}%)")
+    print(f"Optimality failures: {optimality_fail}  ({optimality_fail_pct:.1f}%)")
+    print(f"Total failure rate:  {total_fail}  ({total_fail_pct:.1f}%)")
 
     return {
         "tested": tested,
