@@ -1,9 +1,9 @@
-# test_harness_pc_const.py
 import itertools
 import math
 import os
 import sys
 import numpy as np
+import time
 
 # If your modules live one directory up:
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -316,6 +316,7 @@ def test_algorithm_parallel(algorithm,
     Parallel version of test_algorithm using ProcessPoolExecutor with streaming.
     Does not store all configs or batches.
     """
+    start = time.time()
 
     try:
         from tqdm import tqdm
@@ -349,6 +350,9 @@ def test_algorithm_parallel(algorithm,
             if pbar is not None: pbar.update(t)
 
     if pbar is not None: pbar.close()
+    end = time.time()
+    runtime = end - start
+    avg_speed = tested / runtime if runtime > 0 else 0.0
 
     epsilon_fail_pct = 100.0 * epsilon_fail / tested if tested else 0.0
     optimality_fail_pct = 100.0 * optimality_fail / tested if tested else 0.0
@@ -356,6 +360,8 @@ def test_algorithm_parallel(algorithm,
 
     print("\n=== RESULTS (parallel) ===")
     print(f"Tested cases:        {tested:,}")
+    print(f"Runtime (s):         {runtime:.2f}")
+    print(f"Average speed:       {avg_speed:,.0f} cases/s")
     print(f"Epsilon failures:    {epsilon_fail}  ({epsilon_fail_pct:.1f}%)")
     print(f"Optimality failures: {optimality_fail}  ({optimality_fail_pct:.1f}%)")
     print(f"Total failure rate:  {total_fail}  ({total_fail_pct:.1f}%)")

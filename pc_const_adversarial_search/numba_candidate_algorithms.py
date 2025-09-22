@@ -133,3 +133,78 @@ def numba_recursive_split2(pc_fx, epsilon):
 
     return segs, len(lst), n
 
+@njit
+def numba_agglomerative_yspread(pc_fx, eps):
+    """
+    Bottom-up agglomerative merge by smallest y-spread.
+    Numba version (no heapq).
+    pc_fx: (n,2) float64 array with [(-inf,inf),(x1,y1),...,(xn,yn),(x_{n+1},inf)]
+    eps: float
+    Returns: (out_segments, num_pieces, given_pieces)
+    """
+
+    n = pc_fx.shape[0] - 2  # number of true pieces
+    if n <= 0:
+        segs = np.empty((1,2),dtype=np.float64)
+        segs[0,0] = pc_fx[-1,0]
+        segs[0,1] = np.inf
+        return segs, 0, 0
+
+    X = pc_fx[1:-1,0]
+    Y = pc_fx[1:-1,1]
+
+    alive = np.ones(n, dtype=np.bool_)  # all active initially
+
+    changed = True
+    while changed:
+        changed = False
+        best_s = 1e308
+        best_i = -1
+        for i in range(n-1):
+            if not alive[i] or not alive[i+1]:
+                continue
+            lo = min(Y[i], Y[i+1])
+            hi = max(Y[i], Y[i+1])
+            if abs(hi - lo) <= 2.0*eps + 1e-9*abs(lo):
+                s = hi - lo
+                if s < best_s:
+                    best_s = s
+                    best_i = i
+        if best_i != -1:
+            # merge best_i and best_i+1
+            alive[best_i+1] = False
+            changed = True
+
+    # Build blocks
+    out = []
+    i = 0
+    while i < n:
+        if not alive[i]:
+            i += 1
+            continue
+        lo = Y[i] - eps
+        hi = Y[i] + eps
+        x_left = X[i]
+        j = i+1
+        while j < n and not alive[j]:
+            yj = Y[j]
+            lo = max(lo, yj - eps)
+            hi = min(hi, yj + eps)
+            j += 1
+        val = 0.5*(lo+hi)
+        out.append((x_left, val))
+        i = j
+
+    # Convert to numpy array with boundary
+    m = len(out)
+    segs = np.empty((m+1,2), dtype=np.float64)
+    for k in range(m):
+        segs[k,0] = out[k][0]
+        segs[k,1] = out[k][1]
+    segs[m,0] = pc_fx[-1,0]
+    segs[m,1] = np.inf
+
+    return segs, m, n
+
+candidate_algorithms = [numba_agglomerative_yspread]
+
