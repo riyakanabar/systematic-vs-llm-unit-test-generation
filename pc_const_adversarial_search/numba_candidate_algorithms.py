@@ -134,6 +134,90 @@ def numba_recursive_split2(pc_fx, epsilon):
     return segs, len(lst), n
 
 @njit
+def numba_lookahead_split(pc_fx, epsilon):
+    """
+    Numba-compiled lookahead split algorithm.
+
+    Parameters
+    ----------
+    pc_fx : (n,2) float64 array
+        Includes sentinels [(-inf,inf), (x1,y1), ... (xn,yn), (x_{n+1},inf)]
+    epsilon : float
+
+    Returns
+    -------
+    segs : (m+1,2) float64 array
+    num_pieces : int
+    given_pieces : int
+    """
+    X = pc_fx[1:, 0]      # includes right boundary
+    Y = pc_fx[1:-1, 1]    # interior only
+    n = Y.shape[0]
+
+    out = List()
+
+    i = 0
+    while i < n:
+        vmin = Y[i]
+        vmax = Y[i]
+        j = i + 1
+        while j < n:
+            vmin2 = vmin if vmin < Y[j] else Y[j]
+            vmax2 = vmax if vmax > Y[j] else Y[j]
+
+            # check feasibility
+            if abs(vmax2 - vmin2) <= 2.0*epsilon + 1e-9*abs(vmin2):
+                vmin = vmin2
+                vmax = vmax2
+                j += 1
+            else:
+                # choose best split k in [i..j-1] minimizing left band width
+                best_k = i
+                best_width = 1e308
+                cur_min = Y[i]
+                cur_max = Y[i]
+                for k in range(i, j):
+                    yk = Y[k]
+                    if yk < cur_min:
+                        cur_min = yk
+                    if yk > cur_max:
+                        cur_max = yk
+                    width = cur_max - cur_min
+                    if width < best_width:
+                        best_width = width
+                        best_k = k
+
+                # compute c = midpoint of min/max in [i..best_k]
+                block_min = Y[i]
+                block_max = Y[i]
+                for kk in range(i+1, best_k+1):
+                    ykk = Y[kk]
+                    if ykk < block_min:
+                        block_min = ykk
+                    if ykk > block_max:
+                        block_max = ykk
+                c = 0.5*(block_min + block_max)
+
+                out.append((X[i], c))
+                i = best_k + 1
+                break
+        else:
+            # j == n: close segment
+            c = 0.5*(vmin + vmax)
+            out.append((X[i], c))
+            i = j
+
+    # finalize with right boundary
+    segs = np.empty((len(out)+1, 2), dtype=np.float64)
+    for k in range(len(out)):
+        segs[k, 0] = out[k][0]
+        segs[k, 1] = out[k][1]
+    segs[len(out), 0] = X[-1]
+    segs[len(out), 1] = np.inf
+
+    return segs, len(out), n
+
+@njit
 def numba_agglomerative_yspread(pc_fx, eps):
     """
     Bottom-up agglomerative merge by smallest y-spread.
@@ -206,5 +290,115 @@ def numba_agglomerative_yspread(pc_fx, eps):
 
     return segs, m, n
 
-candidate_algorithms = [numba_agglomerative_yspread]
+@njit
+def _best_split(Y, i, j):
+    """
+    Choose k in [i, j-1] minimizing max(range(i..k), range(k+1..j)).
+    """
+    best_k = i
+    best_cost = 1e308
+
+    pre_min = np.empty(j - i + 1, dtype=np.float64)
+    pre_max = np.empty(j - i + 1, dtype=np.float64)
+    suf_min = np.empty(j - i + 1, dtype=np.float64)
+    suf_max = np.empty(j - i + 1, dtype=np.float64)
+
+    cur_min = Y[i]
+    cur_max = Y[i]
+    for t in range(i, j + 1):
+        if Y[t] < cur_min:
+            cur_min = Y[t]
+        if Y[t] > cur_max:
+            cur_max = Y[t]
+        pre_min[t - i] = cur_min
+        pre_max[t - i] = cur_max
+
+    cur_min = Y[j]
+    cur_max = Y[j]
+    for t in range(j, i - 1, -1):
+        if Y[t] < cur_min:
+            cur_min = Y[t]
+        if Y[t] > cur_max:
+            cur_max = Y[t]
+        suf_min[t - i] = cur_min
+        suf_max[t - i] = cur_max
+
+    for k in range(i, j):
+        left_range = pre_max[k - i] - pre_min[k - i]
+        right_range = suf_max[k + 1 - i] - suf_min[k + 1 - i]
+        cost = left_range if left_range > right_range else right_range
+        if cost < best_cost:
+            best_cost = cost
+            best_k = k
+
+    return best_k
+
+
+@njit
+def numba_binary_split(pc_fx, epsilon):
+    """
+    Binary split algorithm in Numba.
+
+    Parameters
+    ----------
+    pc_fx : (n,2) float64 array with sentinels
+    epsilon : float
+
+    Returns
+    -------
+    segs : (m+1,2) float64 array
+    num_pieces : int
+    given_pieces : int
+    """
+    X = pc_fx[1:, 0]      # includes right boundary
+    Y = pc_fx[1:-1, 1]    # interior values
+    n = Y.shape[0]
+
+    # stack of (i,j) indices
+    stack = List()
+    stack.append((0, n - 1))
+
+    segments = List()  # (i,j,c)
+
+    while len(stack) > 0:
+        i, j = stack.pop()
+        # compute min/max in [i..j]
+        vmin = Y[i]
+        vmax = Y[i]
+        for t in range(i + 1, j + 1):
+            if Y[t] < vmin:
+                vmin = Y[t]
+            if Y[t] > vmax:
+                vmax = Y[t]
+
+        if abs(vmax - vmin) <= 2.0 * epsilon + 1e-9 * abs(vmin):
+            c = 0.5 * (vmin + vmax)
+            segments.append((i, j, c))
+        else:
+            k = _best_split(Y, i, j)
+            stack.append((k + 1, j))
+            stack.append((i, k))
+
+    # sort by start index
+    # simple insertion sort (since n small)
+    for a in range(len(segments)):
+        for b in range(a + 1, len(segments)):
+            if segments[b][0] < segments[a][0]:
+                tmp = segments[a]
+                segments[a] = segments[b]
+                segments[b] = tmp
+
+    # build output array
+    m = len(segments)
+    segs = np.empty((m + 1, 2), dtype=np.float64)
+    for k in range(m):
+        s, e, c = segments[k]
+        segs[k, 0] = X[s]
+        segs[k, 1] = c
+    segs[m, 0] = X[-1]
+    segs[m, 1] = np.inf
+
+    return segs, m, n
+
+
 
