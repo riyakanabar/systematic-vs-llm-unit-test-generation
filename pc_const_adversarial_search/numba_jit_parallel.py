@@ -25,7 +25,7 @@ pieces_range = range(2, 7)               # number of pieces m = 2..10
 # HELPERS
 # -----------------------
 
-@njit
+@njit(cache=True)
 def numba_is_within_epsilon(pc_cons_fx, optimal_pc_fx, epsilon):
     """Check if the approximation is within epsilon of the original function."""
     # optimal_pc_fx_sorted = sorted(optimal_pc_fx, key=lambda x: x[0])

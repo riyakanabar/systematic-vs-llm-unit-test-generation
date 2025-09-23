@@ -38,7 +38,7 @@ def approximate_pc_cons_fx(pc_fx, epsilon):
 import numpy as np
 from numba import njit
 
-@njit
+@njit(cache=True)
 def numba_approximate_pc_shortest_path(pc_fx, epsilon):
     """
     Numba-friendly version.

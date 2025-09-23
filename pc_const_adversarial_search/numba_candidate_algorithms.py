@@ -2,7 +2,7 @@ import numpy as np
 from numba import njit, types
 from numba.typed import List
 
-@njit
+@njit(cache=True)
 def rec(pc_fx, epsilon, start_idx, end_idx):
     # Get segment values
     ys = pc_fx[start_idx:end_idx+1, 1]
@@ -35,7 +35,7 @@ def rec(pc_fx, epsilon, start_idx, end_idx):
     right = rec(pc_fx, epsilon, mid_idx, end_idx)
     return np.vstack((left, right))
 
-@njit
+@njit(cache=True)
 def numba_recursive_split1(pc_fx, epsilon):
     segments = rec(pc_fx, epsilon, 1, pc_fx.shape[0]-2)
 
@@ -48,7 +48,7 @@ def numba_recursive_split1(pc_fx, epsilon):
     return segments, num_pieces, given_pieces
 
 
-@njit
+@njit(cache=True)
 def _rec_split2(X, Y, i, j, epsilon):
     segs = List()
 
@@ -93,7 +93,7 @@ def _rec_split2(X, Y, i, j, epsilon):
 
     return segs
 
-@njit
+@njit(cache=True)
 def numba_recursive_split2(pc_fx, epsilon):
     """
     Numba-compiled version of recursive_split2.
@@ -133,7 +133,7 @@ def numba_recursive_split2(pc_fx, epsilon):
 
     return segs, len(lst), n
 
-@njit
+@njit(cache=True)
 def numba_lookahead_split(pc_fx, epsilon):
     """
     Numba-compiled lookahead split algorithm.
@@ -217,7 +217,7 @@ def numba_lookahead_split(pc_fx, epsilon):
 
     return segs, len(out), n
 
-@njit
+@njit(cache=True)
 def numba_agglomerative_yspread(pc_fx, eps):
     """
     Bottom-up agglomerative merge by smallest y-spread.
@@ -290,7 +290,7 @@ def numba_agglomerative_yspread(pc_fx, eps):
 
     return segs, m, n
 
-@njit
+@njit(cache=True)
 def _best_split(Y, i, j):
     """
     Choose k in [i, j-1] minimizing max(range(i..k), range(k+1..j)).
@@ -334,7 +334,7 @@ def _best_split(Y, i, j):
     return best_k
 
 
-@njit
+@njit(cache=True)
 def numba_binary_split(pc_fx, epsilon):
     """
     Binary split algorithm in Numba.
@@ -400,7 +400,7 @@ def numba_binary_split(pc_fx, epsilon):
 
     return segs, m, n
 
-@njit
+@njit(cache=True)
 def numba_pruned_dp(pc_fx, eps):
     """
     Numba-optimized pruned_dp.
@@ -490,7 +490,7 @@ def numba_pruned_dp(pc_fx, eps):
     return optimal_pc_fx, m - 1, n
 
 
-@njit
+@njit(cache=True)
 def numba_beam_search(pc_fx, epsilon, beam_size=8):
     """
     Numba-safe beam search (no np.lexsort, no Python min/max).
@@ -764,7 +764,7 @@ def numba_beam_search(pc_fx, epsilon, beam_size=8):
     return out, 1, n
 
 
-@njit
+@njit(cache=True)
 def _reconstruct_from_node_pool(last_node_id, x_right, node_start_x, node_c, node_parent):
     # unwind nodes → segments, then add last boundary
     # count
