@@ -370,40 +370,6 @@ def agglomerative_yspread(pc_fx: List[Tuple[float, float]], eps: float):
         i = j
     return _to_output(out, pc_fx[-1][0]), len(out), _count_original_pieces(pc_fx)
 
-# ========== 7) Beam Search (Width B) on Split Positions ==========
-# Strategy: keep up to B partial segmentations while scanning left-to-right. At each step, either
-#           extend the current block if feasible or start a new block. Rank partial solutions by (pieces_so_far, -reach).
-# Complexity: O(B * n)
-
-def alg7_beam_search(pc_fx: List[Tuple[float, float]], eps: float, B: int = 4):
-    pieces = _extract_pieces(pc_fx)
-    n = len(pieces)
-    # state = (i, x_left, lo, hi, pieces_list)
-    beam = [(0, pieces[0][0], pieces[0][1]-eps, pieces[0][1]+eps, [])]  # start before emitting
-    for idx in range(1, n):
-        y = pieces[idx][1]
-        lo2, hi2 = y - eps, y + eps
-        new_beam = []
-        for _, x_left, lo, hi, plist in beam:
-            # Option A: extend
-            loE, hiE = max(lo, lo2), min(hi, hi2)
-            if loE <= hiE:
-                new_beam.append((len(plist), x_left, loE, hiE, plist[:]))
-            # Option B: close previous and start new at idx-1
-            val = (lo + hi) / 2.0
-            plistB = plist[:] + [(x_left, val)]
-            new_beam.append((len(plistB), pieces[idx][0], lo2, hi2, plistB))
-        # keep best B states by (pieces_so_far, widest current band)
-        new_beam.sort(key=lambda s: (s[0], -(s[3]-s[2])))
-        beam = new_beam[:B]
-    # Close each and pick best
-    candidates = []
-    for pieces_so_far, x_left, lo, hi, plist in beam:
-        val = (lo + hi) / 2.0
-        cand = plist + [(x_left, val)]
-        candidates.append(cand)
-    out = min(candidates, key=len)
-    return _to_output(out, pc_fx[-1][0]), len(out), _count_original_pieces(pc_fx)
 
 # ========== 8) Pruned Dynamic Programming (Feasible-Window) ==========
 # Strategy: DP[i] = min pieces to cover first i segments.

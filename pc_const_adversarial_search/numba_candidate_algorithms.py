@@ -1,5 +1,5 @@
 import numpy as np
-from numba import njit
+from numba import njit, types
 from numba.typed import List
 
 @njit
@@ -400,5 +400,390 @@ def numba_binary_split(pc_fx, epsilon):
 
     return segs, m, n
 
+@njit
+def numba_pruned_dp(pc_fx, eps):
+    """
+    Numba-optimized pruned_dp.
 
+    Parameters
+    ----------
+    pc_fx : np.ndarray of shape (n+2, 2)
+        Array including boundary points [(-inf, inf), (x1,y1), ..., (xn,yn), (x_{n+1}, inf)]
+    eps : float
+        epsilon tolerance
+
+    Returns
+    -------
+    optimal_pc_fx : np.ndarray of shape (m, 2)
+        Output approximation with boundary points
+    m : int
+        number of approximation pieces
+    n : int
+        number of original pieces
+    """
+    n = pc_fx.shape[0] - 2  # exclude boundary points
+    INF = 10 ** 9
+
+    # dp arrays
+    dp = np.full(n + 1, INF, dtype=np.int64)
+    prev = np.full(n + 1, -1, dtype=np.int64)
+    dp[0] = 0
+
+    xs = pc_fx[:, 0]
+    ys = pc_fx[:, 1]
+
+    # DP loop
+    for i in range(1, n + 1):
+        lo = ys[i] - eps
+        hi = ys[i] + eps
+        j = i - 1
+        while j >= 0:
+            if j < i - 1:
+                y = ys[j + 1]
+                lo = max(lo, y - eps)
+                hi = min(hi, y + eps)
+            if lo > hi:
+                break
+            if dp[j] + 1 < dp[i]:
+                dp[i] = dp[j] + 1
+                prev[i] = j
+            j -= 1
+
+    # Reconstruct solution
+    out_x = np.empty(n + 2, dtype=np.float64)
+    out_y = np.empty(n + 2, dtype=np.float64)
+    m = 0
+
+    i = n
+    while i > 0:
+        j = prev[i]
+        lo = -np.inf
+        hi = np.inf
+        for k in range(j, i):
+            y = ys[k + 1]
+            lo = max(lo, y - eps)
+            hi = min(hi, y + eps)
+        val = 0.5 * (lo + hi)
+        out_x[m] = xs[j + 1]
+        out_y[m] = val
+        m += 1
+        i = j
+
+    # Reverse results in-place
+    for k in range(m // 2):
+        kk = m - 1 - k
+        tmpx, tmpy = out_x[k], out_y[k]
+        out_x[k], out_y[k] = out_x[kk], out_y[kk]
+        out_x[kk], out_y[kk] = tmpx, tmpy
+
+    # Add last boundary point
+    out_x[m] = xs[-1]
+    out_y[m] = np.inf
+    m += 1
+
+    # Build final output (trim unused slots)
+    optimal_pc_fx = np.empty((m, 2), dtype=np.float64)
+    for t in range(m):
+        optimal_pc_fx[t, 0] = out_x[t]
+        optimal_pc_fx[t, 1] = out_y[t]
+
+    return optimal_pc_fx, m - 1, n
+
+
+@njit
+def numba_beam_search(pc_fx, epsilon, beam_size=8):
+    """
+    Numba-safe beam search (no np.lexsort, no Python min/max).
+    pc_fx: ndarray (n+2,2) with sentinels [(-inf, inf), (x1,y1), ... , (x_{n}, y_{n}), (x_{n+1}, inf)]
+    Returns: (out_segments ndarray (m+1,2) incl. last boundary, m pieces, n original pieces)
+    """
+    X = pc_fx[:, 0]
+    Y = pc_fx[:, 1]
+    n = pc_fx.shape[0] - 2  # exclude boundaries
+
+    # ---------- precompute feasibility: furthest j reachable from i ----------
+    furthest = np.empty(n, dtype=np.int64)
+    for i in range(n):
+        vmin = Y[i+1]
+        vmax = Y[i+1]
+        j = i
+        while j < n:
+            ycur = Y[j+1]
+            if ycur < vmin:
+                vmin = ycur
+            if ycur > vmax:
+                vmax = ycur
+            diff = vmax - vmin
+            if diff < 0.0:
+                diff = -diff
+            # ref = max(1.0, abs(vmax), abs(vmin)) without max()
+            ref = 1.0
+            av = vmax
+            if av < 0.0:
+                av = -av
+            if av > ref:
+                ref = av
+            bv = vmin
+            if bv < 0.0:
+                bv = -bv
+            if bv > ref:
+                ref = bv
+            tol = 2.0 * epsilon + 1e-9 * ref
+            if diff <= tol:
+                j += 1
+            else:
+                break
+        furthest[i] = j - 1
+
+    # ---------- state representation (frontier) ----------
+    # We'll store frontier as fixed arrays (no dicts). Each state points to a node in a pool that lets us backtrack.
+    max_states = beam_size * (n + 1)  # per layer cap
+    pieces = np.empty(max_states, dtype=np.int64)
+    neg_span = np.empty(max_states, dtype=np.float64)
+    last_idx = np.empty(max_states, dtype=np.int64)   # ending index j in [0..n-1], or -1 for root
+    parent_state = np.empty(max_states, dtype=np.int64)  # parent state index in previous layer (only for bookkeeping here)
+    node_id_of_state = np.empty(max_states, dtype=np.int64)  # id into node pool
+    state_count = 0
+
+    # ---------- node pool for backtracking ----------
+    # Each new state adds one node that records (start_x, c) and a link to previous node.
+    # Pool size is capped; if you hit it, reduce beam_size.
+    max_nodes = max_states * (n + 1)
+    node_start_x = np.empty(max_nodes, dtype=np.float64)
+    node_c = np.empty(max_nodes, dtype=np.float64)
+    node_parent = np.empty(max_nodes, dtype=np.int64)
+    node_count = 0
+
+    # root "state" (no segment)
+    pieces[0] = 0
+    neg_span[0] = 0.0
+    last_idx[0] = -1
+    parent_state[0] = -1
+    node_id_of_state[0] = -1  # root has no node
+    state_count = 1
+
+    # ------------- main expansion loop -------------
+    while True:
+        # generate candidates
+        n_pieces = np.empty(max_states, dtype=np.int64)
+        n_neg_span = np.empty(max_states, dtype=np.float64)
+        n_last_idx = np.empty(max_states, dtype=np.int64)
+        n_parent_state = np.empty(max_states, dtype=np.int64)
+        n_node_id = np.empty(max_states, dtype=np.int64)
+        new_count = 0
+        any_progress = False
+
+        for si in range(state_count):
+            li = last_idx[si]      # previous segment ended at li
+            i = li + 1             # next start
+            pcs = pieces[si]
+            ns = neg_span[si]
+            chain_node = node_id_of_state[si]
+
+            if i >= n:
+                # already complete — carry forward as a "complete" candidate with end at n-1
+                if new_count < max_states:
+                    n_pieces[new_count] = pcs
+                    n_neg_span[new_count] = ns
+                    n_last_idx[new_count] = n - 1
+                    n_parent_state[new_count] = si
+                    n_node_id[new_count] = chain_node
+                    new_count += 1
+                continue
+
+            jmax = furthest[i]
+            if jmax < i:
+                jmax = i
+            any_progress = True
+
+            for j in range(jmax, i - 1, -1):  # prefer longer extensions first
+                # compute [vmin, vmax] over Y[i..j]
+                vmin = Y[i+1]
+                vmax = Y[i+1]
+                kk = i
+                while kk <= j:
+                    ycur = Y[kk+1]
+                    if ycur < vmin:
+                        vmin = ycur
+                    if ycur > vmax:
+                        vmax = ycur
+                    kk += 1
+                c = 0.5 * (vmin + vmax)
+                # span addition
+                span_add = 0.0
+                if (j + 1) < X.shape[0]:
+                    span_add = X[j+1 + 1] - X[i + 1]  # +1 because X has boundary at 0
+                # add candidate
+                if new_count < max_states and node_count < max_nodes:
+                    # create node for this segment
+                    node_start_x[node_count] = X[i + 1]  # piece starts at X[i+1] (skip left boundary)
+                    node_c[node_count] = c
+                    node_parent[node_count] = chain_node
+                    n_pieces[new_count] = pcs + 1
+                    n_neg_span[new_count] = ns - span_add
+                    n_last_idx[new_count] = j
+                    n_parent_state[new_count] = si
+                    n_node_id[new_count] = node_count
+                    node_count += 1
+                    new_count += 1
+                else:
+                    # out of capacity; stop expanding further
+                    break
+            # capacity guard
+            if new_count >= max_states:
+                break
+
+        if not any_progress:
+            # nothing more to expand; either we already carried completes or nothing is possible
+            # choose the best complete among candidates (end == n-1), if any
+            best_idx = -1
+            for ci in range(new_count):
+                if n_last_idx[ci] == n - 1:
+                    if best_idx == -1:
+                        best_idx = ci
+                    else:
+                        # better if fewer pieces, or equal pieces and smaller neg_span
+                        better = False
+                        if n_pieces[ci] < n_pieces[best_idx]:
+                            better = True
+                        elif n_pieces[ci] == n_pieces[best_idx] and n_neg_span[ci] < n_neg_span[best_idx]:
+                            better = True
+                        if better:
+                            best_idx = ci
+            if best_idx == -1:
+                # fallback
+                out = np.empty((2, 2), dtype=np.float64)
+                out[0, 0] = X[1]; out[0, 1] = Y[1]
+                out[1, 0] = X[-1]; out[1, 1] = np.inf
+                return out, 1, n
+            # reconstruct from best complete candidate
+            return _reconstruct_from_node_pool(n_node_id[best_idx], X[-1],
+                                               node_start_x, node_c, node_parent), int(n_pieces[best_idx]), n
+
+        # ---------- beam prune per ending index ----------
+        # For each key in [0..n-1], keep top beam_size by (pieces asc, neg_span asc)
+        # (We gather them into the next frontier arrays.)
+        state_count = 0
+        for key in range(n):
+            # small fixed-size buffer for this key
+            buf_used = 0
+            buf_idx = np.empty(beam_size, dtype=np.int64)
+            buf_pcs = np.empty(beam_size, dtype=np.int64)
+            buf_span = np.empty(beam_size, dtype=np.float64)
+
+            # collect best K for this key
+            for ci in range(new_count):
+                if n_last_idx[ci] != key:
+                    continue
+                if buf_used < beam_size:
+                    buf_idx[buf_used] = ci
+                    buf_pcs[buf_used] = n_pieces[ci]
+                    buf_span[buf_used] = n_neg_span[ci]
+                    buf_used += 1
+                else:
+                    # find worst in buffer
+                    worst = 0
+                    wi = 1
+                    while wi < buf_used:
+                        worse = False
+                        if buf_pcs[wi] > buf_pcs[worst]:
+                            worse = True
+                        elif buf_pcs[wi] == buf_pcs[worst] and buf_span[wi] > buf_span[worst]:
+                            worse = True
+                        if worse:
+                            worst = wi
+                        wi += 1
+                    # if candidate better than worst, replace
+                    better = False
+                    if n_pieces[ci] < buf_pcs[worst]:
+                        better = True
+                    elif n_pieces[ci] == buf_pcs[worst] and n_neg_span[ci] < buf_span[worst]:
+                        better = True
+                    if better:
+                        buf_idx[worst] = ci
+                        buf_pcs[worst] = n_pieces[ci]
+                        buf_span[worst] = n_neg_span[ci]
+
+            # selection sort the buffer (small K) by (pieces, neg_span)
+            a = 0
+            while a < buf_used:
+                minpos = a
+                b = a + 1
+                while b < buf_used:
+                    better = False
+                    if buf_pcs[b] < buf_pcs[minpos]:
+                        better = True
+                    elif buf_pcs[b] == buf_pcs[minpos] and buf_span[b] < buf_span[minpos]:
+                        better = True
+                    if better:
+                        minpos = b
+                    b += 1
+                if minpos != a:
+                    # swap
+                    tmpi = buf_idx[a]; tmpp = buf_pcs[a]; tmps = buf_span[a]
+                    buf_idx[a] = buf_idx[minpos]; buf_pcs[a] = buf_pcs[minpos]; buf_span[a] = buf_span[minpos]
+                    buf_idx[minpos] = tmpi; buf_pcs[minpos] = tmpp; buf_span[minpos] = tmps
+                a += 1
+
+            # append pruned states for this key to next frontier
+            bi = 0
+            while bi < buf_used and state_count < max_states:
+                ci = buf_idx[bi]
+                pieces[state_count] = n_pieces[ci]
+                neg_span[state_count] = n_neg_span[ci]
+                last_idx[state_count] = n_last_idx[ci]
+                parent_state[state_count] = n_parent_state[ci]  # (not needed for backtrack)
+                node_id_of_state[state_count] = n_node_id[ci]
+                state_count += 1
+                bi += 1
+
+        # if any complete (key == n-1) reached, choose best and return
+        best_idx = -1
+        si = 0
+        while si < state_count:
+            if last_idx[si] == n - 1:
+                if best_idx == -1:
+                    best_idx = si
+                else:
+                    better = False
+                    if pieces[si] < pieces[best_idx]:
+                        better = True
+                    elif pieces[si] == pieces[best_idx] and neg_span[si] < neg_span[best_idx]:
+                        better = True
+                    if better:
+                        best_idx = si
+            si += 1
+        if best_idx != -1:
+            return _reconstruct_from_node_pool(node_id_of_state[best_idx], X[-1],
+                                               node_start_x, node_c, node_parent), int(pieces[best_idx]), n
+
+    # fallback (shouldn’t hit)
+    out = np.empty((2, 2), dtype=np.float64)
+    out[0, 0] = X[1]; out[0, 1] = Y[1]
+    out[1, 0] = X[-1]; out[1, 1] = np.inf
+    return out, 1, n
+
+
+@njit
+def _reconstruct_from_node_pool(last_node_id, x_right, node_start_x, node_c, node_parent):
+    # unwind nodes → segments, then add last boundary
+    # count
+    cnt = 0
+    nid = last_node_id
+    while nid != -1:
+        cnt += 1
+        nid = node_parent[nid]
+    segs = np.empty((cnt + 1, 2), dtype=np.float64)  # +1 for final boundary
+    # fill reversed
+    nid = last_node_id
+    idx = cnt - 1
+    while nid != -1:
+        segs[idx, 0] = node_start_x[nid]
+        segs[idx, 1] = node_c[nid]
+        nid = node_parent[nid]
+        idx -= 1
+    # append boundary
+    segs[cnt, 0] = x_right
+    segs[cnt, 1] = np.inf
+    return segs
 

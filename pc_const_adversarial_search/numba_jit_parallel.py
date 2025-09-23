@@ -14,10 +14,10 @@ from numba import njit
 # -----------------------
 # CONFIG
 # -----------------------
-x_values = list(range(0, 11))             # 0..10 (11 grid points)
-y_values = list(range(1, 9))              # 1..8
-epsilon_values = [0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 6, 7]
-pieces_range = range(2, 11)               # number of pieces m = 2..10
+x_values = list(range(0, 7))             # 0..10 (11 grid points)
+y_values = list(range(1, 8))              # 1..8
+epsilon_values = [0.5, 0.75, 1, 1.5, 5, 6, 7]
+pieces_range = range(2, 7)               # number of pieces m = 2..10
 
 
 

@@ -1,10 +1,10 @@
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from numba_candidate_algorithms import numba_recursive_split2, numba_agglomerative_yspread
+from numba_candidate_algorithms import numba_recursive_split2, numba_pruned_dp, numba_beam_search
 from input_algorithms import beam_search, recursive_split1, pruned_dp
 from numba_jit_parallel import test_algorithm_parallel
 
 if __name__ == "__main__":
-    test_algorithm_parallel(numba_agglomerative_yspread)
+    test_algorithm_parallel(numba_beam_search)
 
