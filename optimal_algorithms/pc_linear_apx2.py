@@ -68,6 +68,7 @@ def force_cut_if_needed(p1, p2, pc_linear_fx, epsilon):
     return None
 
 def approximate_pc_linear_fx(pc_linear_fx, w):
+    # reconstruct to get x,y arrays (as before)
     y = reconstruct_piecewise_function(pc_linear_fx)
     y = np.array(y)
     x = np.arange(pc_linear_fx[0][0], pc_linear_fx[0][0] + len(y))
@@ -75,10 +76,22 @@ def approximate_pc_linear_fx(pc_linear_fx, w):
 
     if len(y) <= 2:
         optimal_pc_linear_fx = np.array(pc_linear_fx)
-        optimal_num_pieces = len(pc_linear_fx) - 1
-        given_num_pieces = optimal_num_pieces
-        return optimal_pc_linear_fx, optimal_num_pieces, given_num_pieces
+        return optimal_pc_linear_fx, len(optimal_pc_linear_fx) - 1, len(pc_linear_fx) - 1
 
+    x0, y0 = pc_linear_fx[0]
+    xN, yN = pc_linear_fx[-1]
+
+    # ---------- NEW: try 1-piece within the ±ε band ----------
+    start_cands = [(x0, y0 - w), (x0, y0 + w)]
+    end_cands   = [(xN, yN - w), (xN, yN + w)]
+    for s in start_cands:
+        for e in end_cands:
+            if is_segment_feasible(s, e, pc_linear_fx, w):
+                fx = np.array([s, e])
+                return fx, 1, len(pc_linear_fx) - 1
+    # ----------------------------------------------------------
+
+    # --------- corridor construction (unchanged) ----------
     p_plus = (x[0], y[0] + w)
     l_plus = (x[0], y[0] + w)
     r_plus = (x[1], y[1] + w)
@@ -89,7 +102,7 @@ def approximate_pc_linear_fx(pc_linear_fx, w):
     r_minus = (x[1], y[1] - w)
     s_minus = {(x[0], y[0] - w): (x[1], y[1] - w)}
     t_minus = {(x[1], y[1] - w): (x[0], y[0] - w)}
-    q = []
+    q_tmp = []
     i = 2
     while i < len(y):
         p = (x[i - 1], y[i - 1] + w)
@@ -109,7 +122,7 @@ def approximate_pc_linear_fx(pc_linear_fx, w):
         if calculate_angle(p_i_plus, l_plus, r_minus, '+') < np.pi:
             pt = find_intersection(l_plus, r_minus, p_plus, p_minus)
             if pt is not None:
-                append_strict(q, pt)
+                append_strict(q_tmp, pt)
             p_minus = r_minus
             p_plus = find_intersection(l_plus, r_minus, (x[i - 1], y[i - 1] + w), p_i_plus)
             s_plus[p_plus] = p_i_plus
@@ -123,7 +136,7 @@ def approximate_pc_linear_fx(pc_linear_fx, w):
         elif calculate_angle(p_i_minus, l_minus, r_plus, '-') < np.pi:
             pt = find_intersection(l_minus, r_plus, p_minus, p_plus)
             if pt is not None:
-                append_strict(q, pt)
+                append_strict(q_tmp, pt)
             p_plus = r_plus
             p_minus = find_intersection(l_minus, r_plus, (x[i - 1], y[i - 1] - w), p_i_minus)
             s_minus[p_minus] = p_i_minus
@@ -148,19 +161,28 @@ def approximate_pc_linear_fx(pc_linear_fx, w):
     a = find_intersection(l_plus, r_minus, p_plus, p_minus)
     b = find_intersection(l_minus, r_plus, p_minus, p_plus)
     if a is None or b is None:
-        optimal_pc_linear_fx = np.array(pc_linear_fx)
-        return optimal_pc_linear_fx, len(optimal_pc_linear_fx) - 1, len(pc_linear_fx) - 1
+        fx = np.array(pc_linear_fx)
+        return fx, len(fx) - 1, len(pc_linear_fx) - 1
 
-    # Candidate midpoint
+    # midpoint candidate inside corridor
     p = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
     p = clip_to_band(p[0], p[1], pc_linear_fx, w)
 
-    # Final sequence of vertices
-    q = []
-    # Start point
-    append_strict(q, (pc_linear_fx[0][0], pc_linear_fx[0][1] - w))
+    # ---------- NEW: choose start on lower/upper band based on feasibility ----------
+    start_lo = (x0, y0 - w)
+    start_hi = (x0, y0 + w)
+    if is_segment_feasible(start_lo, p, pc_linear_fx, w):
+        start_pt = start_lo
+    elif is_segment_feasible(start_hi, p, pc_linear_fx, w):
+        start_pt = start_hi
+    else:
+        start_pt = start_lo  # will be cut if needed
+    # -------------------------------------------------------------------------------
 
-    # Enforce feasibility of p
+    # build the final sequence with feasibility enforcement
+    q = []
+    append_strict(q, start_pt)
+
     if not is_segment_feasible(q[-1], p, pc_linear_fx, w):
         cut = force_cut_if_needed(q[-1], p, pc_linear_fx, w)
         if cut is not None:
@@ -169,8 +191,7 @@ def approximate_pc_linear_fx(pc_linear_fx, w):
     else:
         append_strict(q, p)
 
-    # End point handling
-    end = (pc_linear_fx[-1][0], pc_linear_fx[-1][1])
+    end = (xN, yN)
     end = clip_to_band(end[0], end[1], pc_linear_fx, w)
 
     if not is_segment_feasible(q[-1], end, pc_linear_fx, w):
@@ -180,8 +201,10 @@ def approximate_pc_linear_fx(pc_linear_fx, w):
             append_strict(q, cut)
     append_strict(q, end)
 
-    optimal_pc_linear_fx = np.array(q)
-    return optimal_pc_linear_fx, len(optimal_pc_linear_fx) - 1, len(pc_linear_fx) - 1
+    fx = np.array(q)
+    return fx, len(fx) - 1, len(pc_linear_fx) - 1
+
+
 
 def reconstruct_piecewise_function(pc_linear_fx):
     pivot_points = sorted(pc_linear_fx, key=lambda p: p[0])
