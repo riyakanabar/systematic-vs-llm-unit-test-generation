@@ -2,18 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def calculate_angle(point1, point2, point3, direction='+'):
-    """
-    Measures angle between three points in positive or negative direction
-
-    Args:
-        point1 (list): x and y coordinates of first point
-        point2 (list): x and y coordinates of center point (vertex)
-        point3 (list): x and y coordinates of third point
-        direction (str, optional): direction of angle '+' = counterclockwise, '-' = clockwise
-
-    Returns:
-        float: angle in radians
-    """
     angle1 = np.arctan2(point1[1] - point2[1], point1[0] - point2[0])
     angle2 = np.arctan2(point3[1] - point2[1], point3[0] - point2[0])
     angle_diff = angle2 - angle1
@@ -22,42 +10,39 @@ def calculate_angle(point1, point2, point3, direction='+'):
     if direction == '-':
         angle_diff = 2 * np.pi - angle_diff
     return np.round(angle_diff, 6)
+
 def find_intersection(line1_start, line1_end, line2_start, line2_end):
-    """
-    Returns intersection of two lines defined by their endpoints
-
-    Args:
-        line1_start (list): x and y coordinates of first line's start point
-        line1_end (list): x and y coordinates of first line's end point
-        line2_start (list): x and y coordinates of second line's start point
-        line2_end (list): x and y coordinates of second line's end point
-
-    Returns:
-        tuple: x and y coordinates of the intersection, or None if lines are parallel
-    """
     denominator = (line1_end[0] - line1_start[0]) * (line2_end[1] - line2_start[1]) - (
-            line2_end[0] - line2_start[0]) * (line1_end[1] - line1_start[1])
+        line2_end[0] - line2_start[0]) * (line1_end[1] - line1_start[1])
     if abs(denominator) < 1e-10:
         x = (line1_start[0] + line1_end[0]) / 2
         y = (line1_start[1] + line1_end[1]) / 2
         return (np.round(x, 6), np.round(y, 6))
     x = ((line1_end[0] * line1_start[1] - line1_start[0] * line1_end[1]) * (line2_end[0] - line2_start[0]) -
-         (line2_end[0] * line2_start[1] - line2_start[0] * line2_end[1]) * (
-                     line1_end[0] - line1_start[0])) / denominator
+         (line2_end[0] * line2_start[1] - line2_start[0] * line2_end[1]) * (line1_end[0] - line1_start[0])) / denominator
     y = ((line1_end[0] * line1_start[1] - line1_start[0] * line1_end[1]) * (line2_end[1] - line2_start[1]) -
-         (line2_end[0] * line2_start[1] - line2_start[0] * line2_end[1]) * (
-                     line1_end[1] - line1_start[1])) / denominator
+         (line2_end[0] * line2_start[1] - line2_start[0] * line2_end[1]) * (line1_end[1] - line1_start[1])) / denominator
     return (np.round(x, 6), np.round(y, 6))
 
+# ---------- NEW: x-monotonicity guard ----------
+EPSX = 1e-9
+def append_strict(q, pt):
+    """Append pt only if x strictly increases (prevents duplicate x like 0,0 twice)."""
+    if not q:
+        q.append(pt); return
+    if pt[0] <= q[-1][0] + EPSX:
+        return
+    q.append(pt)
+# ------------------------------------------------
+
 def clip_to_band(x, y, pc_linear_fx, epsilon):
-    """Clip a candidate (x, y) into the tolerance band at exact breakpoints if possible."""
     for ox, oy in pc_linear_fx:
-        if abs(x - ox) < 1e-9:  # match x
+        if abs(x - ox) < 1e-9:
             ymin, ymax = oy - epsilon, oy + epsilon
             return (x, min(max(y, ymin), ymax))
     return (x, y)
+
 def is_segment_feasible(p1, p2, pc_linear_fx, epsilon):
-    """Check if line p1->p2 stays inside tolerance band at all breakpoints."""
     x1, y1 = p1
     x2, y2 = p2
     for ox, oy in pc_linear_fx:
@@ -70,13 +55,12 @@ def is_segment_feasible(p1, p2, pc_linear_fx, epsilon):
             if not (oy - epsilon <= y_apx <= oy + epsilon):
                 return False
     return True
+
 def force_cut_if_needed(p1, p2, pc_linear_fx, epsilon):
-    """If segment p1->p2 violates tolerance, cut at the first offending breakpoint."""
     x1, y1 = p1
     x2, y2 = p2
     for ox, oy in sorted(pc_linear_fx):
         if x1 < ox < x2:
-            # interpolation
             y_line = y1 + (y2 - y1) * (ox - x1) / (x2 - x1)
             if not (oy - epsilon <= y_line <= oy + epsilon):
                 cut_y = min(max(y_line, oy - epsilon), oy + epsilon)
@@ -123,7 +107,7 @@ def approximate_pc_linear_fx(pc_linear_fx, w):
         t_minus[p_i_minus] = p
 
         if calculate_angle(p_i_plus, l_plus, r_minus, '+') < np.pi:
-            q.append((find_intersection(l_plus, r_minus, p_plus, p_minus), l_plus, r_minus, p_plus, p_minus))
+            append_strict(q, (find_intersection(l_plus, r_minus, p_plus, p_minus), l_plus, r_minus, p_plus, p_minus))
             p_minus = r_minus
             p_plus = find_intersection(l_plus, r_minus, (x[i - 1], y[i - 1] + w), p_i_plus)
             s_plus[p_plus] = p_i_plus
@@ -135,7 +119,7 @@ def approximate_pc_linear_fx(pc_linear_fx, w):
             while l_minus in s_minus and calculate_angle(l_minus, r_plus, s_minus[l_minus], '-') < np.pi:
                 l_minus = s_minus[l_minus]
         elif calculate_angle(p_i_minus, l_minus, r_plus, '-') < np.pi:
-            q.append((find_intersection(l_minus, r_plus, p_minus, p_plus), l_minus, r_plus, p_minus, p_plus))
+            append_strict(q, (find_intersection(l_minus, r_plus, p_minus, p_plus), l_minus, r_plus, p_minus, p_plus))
             p_plus = r_plus
             p_minus = find_intersection(l_minus, r_plus, (x[i - 1], y[i - 1] - w), p_i_minus)
             s_minus[p_minus] = p_i_minus
@@ -151,7 +135,6 @@ def approximate_pc_linear_fx(pc_linear_fx, w):
                 r_plus = p_i_plus
                 while l_minus in s_minus and calculate_angle(p_i_plus, l_minus, s_minus[l_minus], '+') < np.pi:
                     l_minus = s_minus[l_minus]
-
             if calculate_angle(p_i_minus, l_plus, r_minus, '-') < np.pi:
                 r_minus = p_i_minus
                 while l_plus in s_plus and calculate_angle(p_i_minus, l_plus, s_plus[l_plus], '-') < np.pi:
@@ -161,25 +144,27 @@ def approximate_pc_linear_fx(pc_linear_fx, w):
     a = find_intersection(l_plus, r_minus, p_plus, p_minus)
     b = find_intersection(l_minus, r_plus, p_minus, p_plus)
     if a is None or b is None:
-        return np.array([])
-    # midpoint candidate
+        # NORMALIZED RETURN (avoid NoneType unpack at caller)
+        optimal_pc_linear_fx = np.array(pc_linear_fx)
+        return optimal_pc_linear_fx, len(optimal_pc_linear_fx) - 1, len(pc_linear_fx) - 1
+
     # Candidate midpoint
     p = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
     p = clip_to_band(p[0], p[1], pc_linear_fx, w)
 
     # Final sequence of vertices
     q = []
-    # Always start with first point
-    q.append((pc_linear_fx[0][0], pc_linear_fx[0][1] - w))
+    # Start point (lower band at first x)
+    append_strict(q, (pc_linear_fx[0][0], pc_linear_fx[0][1] - w))
 
     # Enforce feasibility of p
     if not is_segment_feasible(q[-1], p, pc_linear_fx, w):
         cut = force_cut_if_needed(q[-1], p, pc_linear_fx, w)
         if cut is not None:
             cut = clip_to_band(cut[0], cut[1], pc_linear_fx, w)
-            q.append(cut)
+            append_strict(q, cut)
     else:
-        q.append(p)
+        append_strict(q, p)
 
     # End point handling
     end = (pc_linear_fx[-1][0], pc_linear_fx[-1][1])
@@ -189,8 +174,8 @@ def approximate_pc_linear_fx(pc_linear_fx, w):
         cut = force_cut_if_needed(q[-1], end, pc_linear_fx, w)
         if cut is not None:
             cut = clip_to_band(cut[0], cut[1], pc_linear_fx, w)
-            q.append(cut)
-    q.append(end)
+            append_strict(q, cut)
+    append_strict(q, end)
 
     optimal_pc_linear_fx = np.array(q)
     return optimal_pc_linear_fx, len(optimal_pc_linear_fx) - 1, len(pc_linear_fx) - 1
@@ -209,6 +194,7 @@ def reconstruct_piecewise_function(pc_linear_fx):
             y_values.append(x * slope + intercept)
     y_values.append(pivot_points[-1][1])
     return np.array(y_values)
+
 def plot_piecewise_linear_approximation(pc_linear_fx, optimal_pc_linear_fx, epsilon):
     """
     Plots the original piecewise linear function, the optimal approximation, and the error bounds.
