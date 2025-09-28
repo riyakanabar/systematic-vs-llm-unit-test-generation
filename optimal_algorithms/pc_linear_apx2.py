@@ -107,7 +107,9 @@ def approximate_pc_linear_fx(pc_linear_fx, w):
         t_minus[p_i_minus] = p
 
         if calculate_angle(p_i_plus, l_plus, r_minus, '+') < np.pi:
-            append_strict(q, (find_intersection(l_plus, r_minus, p_plus, p_minus), l_plus, r_minus, p_plus, p_minus))
+            pt = find_intersection(l_plus, r_minus, p_plus, p_minus)
+            if pt is not None:
+                append_strict(q, pt)
             p_minus = r_minus
             p_plus = find_intersection(l_plus, r_minus, (x[i - 1], y[i - 1] + w), p_i_plus)
             s_plus[p_plus] = p_i_plus
@@ -119,7 +121,9 @@ def approximate_pc_linear_fx(pc_linear_fx, w):
             while l_minus in s_minus and calculate_angle(l_minus, r_plus, s_minus[l_minus], '-') < np.pi:
                 l_minus = s_minus[l_minus]
         elif calculate_angle(p_i_minus, l_minus, r_plus, '-') < np.pi:
-            append_strict(q, (find_intersection(l_minus, r_plus, p_minus, p_plus), l_minus, r_plus, p_minus, p_plus))
+            pt = find_intersection(l_minus, r_plus, p_minus, p_plus)
+            if pt is not None:
+                append_strict(q, pt)
             p_plus = r_plus
             p_minus = find_intersection(l_minus, r_plus, (x[i - 1], y[i - 1] - w), p_i_minus)
             s_minus[p_minus] = p_i_minus
@@ -144,7 +148,6 @@ def approximate_pc_linear_fx(pc_linear_fx, w):
     a = find_intersection(l_plus, r_minus, p_plus, p_minus)
     b = find_intersection(l_minus, r_plus, p_minus, p_plus)
     if a is None or b is None:
-        # NORMALIZED RETURN (avoid NoneType unpack at caller)
         optimal_pc_linear_fx = np.array(pc_linear_fx)
         return optimal_pc_linear_fx, len(optimal_pc_linear_fx) - 1, len(pc_linear_fx) - 1
 
@@ -154,7 +157,7 @@ def approximate_pc_linear_fx(pc_linear_fx, w):
 
     # Final sequence of vertices
     q = []
-    # Start point (lower band at first x)
+    # Start point
     append_strict(q, (pc_linear_fx[0][0], pc_linear_fx[0][1] - w))
 
     # Enforce feasibility of p
