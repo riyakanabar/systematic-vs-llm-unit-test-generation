@@ -48,8 +48,8 @@ def recursive_split1(pc_fx, epsilon):
                 ys = np.array([y for _, y in segment])
                 max_y = np.max(ys)
                 min_y = np.min(ys)
-                if abs(max_y - min_y) <= 2*epsilon + 1e-9 * abs(min_y):  # mimic np.isclose
-                #if np.isclose(max_y, min_y, atol=2 * epsilon, rtol=1e-9):
+                #if abs(max_y - min_y) <= 2*epsilon + 1e-9 * abs(min_y):  # mimic np.isclose
+                if np.isclose(max_y, min_y, atol=2 * epsilon, rtol=1e-9):
                         y_value = (max_y + min_y) / 2
                         return [[pc_fx[start_idx][0], y_value]]
 

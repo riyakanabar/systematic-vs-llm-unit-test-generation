@@ -8,7 +8,7 @@ from grid_search.variants_test import is_within_epsilon
 SAMPLES = 30
 TESTCASES_PER_SAMPLE = 10
 TOTAL_TESTCASES = SAMPLES * TESTCASES_PER_SAMPLE
-TESTCASE_FILE = "chatgpt4o_few_shot.py"
+TESTCASE_FILE = "copilot.py"
 
 # ---------------------------
 # Validation & duplicates
@@ -154,7 +154,7 @@ def main():
     for index, tc in enumerate(all_cases):
         ok, _reason = validate_test_case(tc)
         if not ok:
-            #print(f"index: {index} {_reason}")
+            # print(f"index: {index} {_reason} {tc}")
             invalid_count += 1
             continue
         k = testcase_key(tc)

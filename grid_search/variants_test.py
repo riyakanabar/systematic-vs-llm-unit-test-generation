@@ -6,13 +6,12 @@ import multiprocessing
 from tqdm import tqdm
 import time
 import bisect
-from numba import jit
 
 def is_within_epsilon(pc_cons_fx, optimal_pc_fx, epsilon):
     """Check if the approximation is within epsilon of the original function."""
     # optimal_pc_fx_sorted = sorted(optimal_pc_fx, key=lambda x: x[0])
-    xs = [x for x, y in pc_cons_fx]
-    ys = [y for x, y in pc_cons_fx]
+    xs = [x for x, y in optimal_pc_fx]
+    ys = [y for x, y in optimal_pc_fx]
 
     for i in range(1, len(pc_cons_fx) - 1):
         x = pc_cons_fx[i][0]
@@ -26,6 +25,7 @@ def is_within_epsilon(pc_cons_fx, optimal_pc_fx, epsilon):
 
         y_opt = ys[j]
         if not np.isclose(y, y_opt, atol=epsilon, rtol=1e-9):
+            # print(f'y is {y} and y_opt is {y_opt} and epsilon {epsilon}')
             return False
 
     return True
