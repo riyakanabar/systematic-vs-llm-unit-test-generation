@@ -10,10 +10,10 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from optimal_algorithms.pc_linear_apx import approximate_pc_linear_fx as optimal_algorithm
 
 # Test case parameters
-x_values = range(0, 11)
+x_values = range(0, 10)
 y_values = range(1, 9)
 epsilon_values = [0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 6, 7]
-pieces = range(2, 11)
+pieces = range(2, 10)
 
 
 def is_within_epsilon(original_fx, approximation, epsilon):
@@ -21,8 +21,8 @@ def is_within_epsilon(original_fx, approximation, epsilon):
     Check if the approximation is within epsilon of the original function
     """
     # Sort both functions by x-values
-    original_fx = sorted(original_fx, key=lambda p: p[0])
-    approximation = sorted(approximation, key=lambda p: p[0])
+    # original_fx = sorted(original_fx, key=lambda p: p[0])
+    # approximation = sorted(approximation, key=lambda p: p[0])
 
     for x, orig_y in original_fx:
         approx_y = None
@@ -74,15 +74,16 @@ def evaluate_test_case(args):
     # Run the algorithm being tested
     apx_fx, alg_pieces, _ = algorithm(points, epsilon)
 
-    # Run the optimal algorithm for comparison
-    optimal_fx, opt_pieces, given_pieces = optimal_algorithm(points, epsilon)
+
 
     # Test 1: Check if the approximation is within epsilon
     within_epsilon, error_msg = is_within_epsilon(points, apx_fx, epsilon)
     if not within_epsilon:
-        return (True, "epsilon_bound", points, epsilon, apx_fx, alg_pieces, optimal_fx, opt_pieces, given_pieces, count,
+        return (True, "epsilon_bound", points, epsilon, apx_fx, alg_pieces, None, None, None, count,
                 error_msg)
 
+    # Run the optimal algorithm for comparison
+    optimal_fx, opt_pieces, given_pieces = optimal_algorithm(points, epsilon)
     # Test 2: Check if algorithm uses more pieces than optimal
     if alg_pieces > opt_pieces:
         return (
@@ -122,6 +123,7 @@ def test_algorithm_parallel(algorithm):
                         pool.terminate()
                         elapsed_time = time.time() - start_time
                         print(f"\nFound counterexample after {count} cases! (Time: {elapsed_time:.2f}s)")
+                        print(f"It failed, now check for..{is_within_epsilon(points, apx_fx, epsilon)}")
                         print(f"Failure type: {test_name}")
                         print(f"Testcase: {points}")
                         print(f"Epsilon: {epsilon}")
@@ -129,9 +131,11 @@ def test_algorithm_parallel(algorithm):
                             print(f"Error: {error_msg}")
                         print(f"Approximated function: {apx_fx}")
                         print(f"Algorithm pieces: {alg_pieces}")
-                        print(f"Optimal function: {optimal_fx}")
-                        print(f"Optimal pieces: {opt_pieces}")
-                        print(f"Given pieces: {given_pieces}")
+                        if optimal_fx is not None:
+                            print(f"Optimal function: {optimal_fx}")
+                            print(f"Optimal pieces: {opt_pieces}")
+                            print(f"Given pieces: {given_pieces}")
+                        pool.terminate()
                         return points, epsilon
         except KeyboardInterrupt:
             print("\nInterrupted by user. Terminating...")

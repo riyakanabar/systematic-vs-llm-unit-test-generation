@@ -10,11 +10,21 @@ from candidate_algorithms.candidate_algos_1 import (
     branch_and_bound as candidate3,
     douglas_peucker_approximation as candidate4,
 )
+from candidate_algorithms.candidate_algos_2 import (
+    shortest_path_dp as candidate5,
+    greedy_farthest_L2 as candidate6,
+    greedy_farthest_Linf as candidate7,
+    top_down_split_L2 as candidate8,
+    top_down_split_Linf as candidate9,
+    botton_up_merge as candidate10,
+    fixed_knot_LP as candidate11
+)
+from candidate_algorithms.modified_imai_iri import modified_imai_iri as candidate12
+from candidate_algorithms.free_knot_LP import free_knot_LP as candidate13
 from cpu_parallel import test_algorithm_parallel
 
 if __name__ == "__main__":
     # Set the start method to 'spawn' for Windows compatibility
-    #844881
     multiprocessing.set_start_method('spawn', force=True)
 
-    test_algorithm_parallel(candidate1)
+    test_algorithm_parallel(candidate12)
