@@ -188,7 +188,7 @@ def plot_piecewise_linear_approximation(pc_linear_fx, optimal_pc_linear_fx, epsi
     plt.title(f"Piecewise Linear Approximation (ε={epsilon})", fontsize=14)
     plt.xlabel("x", fontsize=12)
     plt.ylabel("y", fontsize=12)
-    plt.legend(loc='upper right')
+    plt.legend(loc='best')
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.tight_layout()
     plt.show()

@@ -4,16 +4,16 @@ import numpy as np
 import sys
 import os
 import multiprocessing as mp
-from functools import partial
+import math
 from tqdm import tqdm
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from optimal_algorithms.pc_linear_apx import approximate_pc_linear_fx
+from optimal_algorithms.pc_linear_apx import approximate_pc_linear_fx as optimal_algorithm
 
 # Test case parameters
 x_values = range(0, 11)
-y_values = range(1, 11)
-epsilon_values = [0.1, 0.25, 0.5, 0.7, 1, 1.5, 2, 3, 5, 7]
-pieces = range(1, 11)
+y_values = range(1, 9)
+epsilon_values = [0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 6, 7]
+pieces = range(2, 11)
 
 
 def is_within_epsilon(original_fx, approximation, epsilon):
@@ -37,7 +37,7 @@ def is_within_epsilon(original_fx, approximation, epsilon):
         if approx_y is None and approximation:  # Handle case where x is outside the range
             approx_y = approximation[-1][1]
 
-        if not np.isclose(orig_y, rounded_approx_y, atol=epsilon, rtol=1e-6):
+        if not np.isclose(orig_y, rounded_approx_y, atol=epsilon, rtol=1e-9):
             return False, f"At x={x}: orig_y={orig_y}, approx_y={approx_y} rounded={rounded_approx_y}"
 
     return True, ""
@@ -59,18 +59,11 @@ def generate_test_cases():
                     yield (points, epsilon, count)
                     count += 1
 
-
-def estimate_total_cases():
-    """
-    Estimate the total number of test cases
-    """
+def count_total_cases(n_x, n_y, n_eps, pieces_range):
     total = 0
-    for num_pieces in pieces:
-        num_x_choices = len(list(itertools.combinations(x_values, num_pieces + 1)))
-        num_y_combinations = len(y_values) ** (num_pieces + 1)
-        total += num_x_choices * num_y_combinations * len(epsilon_values)
+    for m in pieces_range:
+        total += math.comb(n_x, m + 1) * (n_y ** (m+1)) * n_eps
     return total
-
 
 def evaluate_test_case(args):
     """
@@ -82,7 +75,7 @@ def evaluate_test_case(args):
     apx_fx, alg_pieces, _ = algorithm(points, epsilon)
 
     # Run the optimal algorithm for comparison
-    optimal_fx, opt_pieces, given_pieces = approximate_pc_linear_fx(points, epsilon)
+    optimal_fx, opt_pieces, given_pieces = optimal_algorithm(points, epsilon)
 
     # Test 1: Check if the approximation is within epsilon
     within_epsilon, error_msg = is_within_epsilon(points, apx_fx, epsilon)
@@ -110,7 +103,7 @@ def test_algorithm_parallel(algorithm):
         for points, epsilon, count in generate_test_cases():
             yield (points, epsilon, count, algorithm)
 
-    total_cases = estimate_total_cases()
+    total_cases = count_total_cases(len(x_values), len(y_values), len(epsilon_values), pieces)
     print(f"Estimated total test cases: {total_cases}")
 
     # Use all available CPU cores except one

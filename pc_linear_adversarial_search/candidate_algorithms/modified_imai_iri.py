@@ -1,6 +1,5 @@
 import numpy as np
-import matplotlib.pyplot as plt
-
+#not an optimal algorithm
 def calculate_angle(point1, point2, point3, direction='+'):
     angle1 = np.arctan2(point1[1] - point2[1], point1[0] - point2[0])
     angle2 = np.arctan2(point3[1] - point2[1], point3[0] - point2[0])
@@ -67,7 +66,7 @@ def force_cut_if_needed(p1, p2, pc_linear_fx, epsilon):
                 return (ox, cut_y)
     return None
 
-def approximate_pc_linear_fx(pc_linear_fx, w):
+def modified_imai_iri(pc_linear_fx, w):
     # reconstruct to get x,y arrays (as before)
     y = reconstruct_piecewise_function(pc_linear_fx)
     y = np.array(y)
@@ -205,7 +204,6 @@ def approximate_pc_linear_fx(pc_linear_fx, w):
     return fx, len(fx) - 1, len(pc_linear_fx) - 1
 
 
-
 def reconstruct_piecewise_function(pc_linear_fx):
     pivot_points = sorted(pc_linear_fx, key=lambda p: p[0])
     y_values = []
@@ -220,41 +218,3 @@ def reconstruct_piecewise_function(pc_linear_fx):
             y_values.append(x * slope + intercept)
     y_values.append(pivot_points[-1][1])
     return np.array(y_values)
-
-def plot_piecewise_linear_approximation(pc_linear_fx, optimal_pc_linear_fx, epsilon):
-    """
-    Plots the original piecewise linear function, the optimal approximation, and the error bounds.
-
-    Args:
-        pc_linear_fx (list): List of (x,y) points defining the original piecewise linear function
-        optimal_pc_linear_fx (list): List of (x,y) points defining the optimal approximation
-        epsilon (float): Error bound used for the approximation
-    """
-    # Reconstruct the original function for plotting
-    y_values = reconstruct_piecewise_function(pc_linear_fx)
-    x_values = np.arange(pc_linear_fx[0][0], pc_linear_fx[0][0] + len(y_values))
-    plt.figure(figsize=(12, 6))
-    plt.plot(x_values, y_values, label="Original function", color='blue', linewidth=4)
-
-    # Plot the error bounds
-    plt.fill_between(x_values,
-                     y_values - epsilon,
-                     y_values + epsilon,
-                     color='lightgray',
-                     alpha=0.5,
-                     label=f'Error bounds (±{epsilon})')
-
-    # Plot the optimal approximation
-    if optimal_pc_linear_fx is not None:
-        opt_x = [p[0] for p in optimal_pc_linear_fx]
-        opt_y = [p[1] for p in optimal_pc_linear_fx]
-        plt.plot(opt_x, opt_y, '-o', label="Optimal approximation", color='red', linewidth=2, markersize=6)
-
-    # Add plot decorations
-    plt.title(f"Piecewise Linear Approximation (ε={epsilon})", fontsize=14)
-    plt.xlabel("x", fontsize=12)
-    plt.ylabel("y", fontsize=12)
-    plt.legend(loc='upper right')
-    plt.grid(True, linestyle='--', alpha=0.7)
-    plt.tight_layout()
-    plt.show()

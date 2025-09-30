@@ -1,12 +1,15 @@
-from optimal_algorithms.pc_linear_apx import approximate_pc_linear_fx, plot_piecewise_linear_approximation
+from optimal_algorithms.pc_linear_apx import plot_piecewise_linear_approximation, approximate_pc_linear_fx
 from test_cases import test_cases
+from pc_linear_adversarial_search.cpu_parallel import is_within_epsilon
 
-pc_linear_fx = test_cases[18][0]
-epsilon = test_cases[18][1]
 
-optimal_pc_linear_fx, optimal_num_pieces, given_num_pieces = approximate_pc_linear_fx(pc_linear_fx, epsilon)
+pc_linear_fx = test_cases[19][0] #18,19 good ones to test
+epsilon = test_cases[19][1]
+
+optimal_pc_linear_fx, optimal_num_pieces, given_num_pieces =approximate_pc_linear_fx(pc_linear_fx, epsilon)
 print(pc_linear_fx)
 print(optimal_pc_linear_fx)
 print(optimal_num_pieces)
 print(given_num_pieces)
 plot_piecewise_linear_approximation(pc_linear_fx, optimal_pc_linear_fx, epsilon)
+print(is_within_epsilon(pc_linear_fx,optimal_pc_linear_fx,epsilon))
