@@ -59,6 +59,23 @@ def approximate_pc_linear_fx(pc_linear_fx, w):
         optimal_num_pieces = len(pc_linear_fx) - 1
         given_num_pieces = optimal_num_pieces
         return optimal_pc_linear_fx, optimal_num_pieces, given_num_pieces
+    if abs(w) < 1e-10:  # Treat as zero
+        if len(y) > 1:
+            dx = x[-1] - x[0]
+            if abs(dx) < 1e-10:
+                # Degenerate x, return original
+                return np.array(pc_linear_fx), len(pc_linear_fx) - 1, len(pc_linear_fx) - 1
+            slope = (y[-1] - y[0]) / dx
+            intercept = y[0] - slope * x[0]
+            deviations = np.abs(y - (slope * x + intercept))
+            if np.all(deviations <= 1e-10):
+                # Collinear within FP tol: merge to 1 piece
+                return np.array([(x[0], y[0]), (x[-1], y[-1])]), 1, len(pc_linear_fx) - 1
+            else:
+                # Not collinear: can't reduce with ε=0, return original
+                return np.array(pc_linear_fx), len(pc_linear_fx) - 1, len(pc_linear_fx) - 1
+        else:
+            return np.array(pc_linear_fx), len(pc_linear_fx) - 1, len(pc_linear_fx) - 1
 
     p_plus = (x[0], y[0] + w)
     l_plus = (x[0], y[0] + w)
@@ -75,14 +92,14 @@ def approximate_pc_linear_fx(pc_linear_fx, w):
     while i < len(y):
         p = (x[i - 1], y[i - 1] + w)
         p_i_plus = (x[i], y[i] + w)
-        while (p != p_plus) and calculate_angle(p_i_plus, p, t_plus[p], '+') > np.pi:
+        while (p != p_plus) and (p in t_plus) and calculate_angle(p_i_plus, p, t_plus[p], '+') > np.pi:
             p = t_plus[p]
         s_plus[p] = p_i_plus
         t_plus[p_i_plus] = p
 
         p = (x[i - 1], y[i - 1] - w)
         p_i_minus = (x[i], y[i] - w)
-        while (p != p_minus) and calculate_angle(p_i_minus, p, t_minus[p], '-') > np.pi:
+        while (p != p_minus) and (p in t_minus) and calculate_angle(p_i_minus, p, t_minus[p], '-') > np.pi:
             p = t_minus[p]
         s_minus[p] = p_i_minus
         t_minus[p_i_minus] = p

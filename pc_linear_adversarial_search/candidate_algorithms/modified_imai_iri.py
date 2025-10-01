@@ -106,14 +106,14 @@ def modified_imai_iri(pc_linear_fx, w):
     while i < len(y):
         p = (x[i - 1], y[i - 1] + w)
         p_i_plus = (x[i], y[i] + w)
-        while (p != p_plus) and calculate_angle(p_i_plus, p, t_plus[p], '+') > np.pi:
+        while (p != p_plus) and (p in t_plus) and calculate_angle(p_i_plus, p, t_plus[p], '+') > np.pi:
             p = t_plus[p]
         s_plus[p] = p_i_plus
         t_plus[p_i_plus] = p
 
         p = (x[i - 1], y[i - 1] - w)
         p_i_minus = (x[i], y[i] - w)
-        while (p != p_minus) and calculate_angle(p_i_minus, p, t_minus[p], '-') > np.pi:
+        while (p != p_minus) and (p in t_minus) and calculate_angle(p_i_minus, p, t_minus[p], '-') > np.pi:
             p = t_minus[p]
         s_minus[p] = p_i_minus
         t_minus[p_i_minus] = p

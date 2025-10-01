@@ -34,8 +34,9 @@ def is_within_epsilon(original_fx, approximation, epsilon):
                 approx_y = slope * x + intercept
                 rounded_approx_y = round(approx_y, 2)
                 break
-        if approx_y is None and approximation:  # Handle case where x is outside the range
+        if approx_y is None and len(approximation) > 0:  # Handle case where x is outside the range
             approx_y = approximation[-1][1]
+            rounded_approx_y = round(approx_y, 2)
 
         if not np.isclose(orig_y, rounded_approx_y, atol=epsilon, rtol=1e-9):
             return False, f"At x={x}: orig_y={orig_y}, approx_y={approx_y} rounded={rounded_approx_y}"
