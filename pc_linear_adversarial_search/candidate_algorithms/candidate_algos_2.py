@@ -268,19 +268,6 @@ def fixed_knot_LP(pc_linear_fx, epsilon):
 
     return optimal_pc_linear_fx, optimal_num_pieces, given_num_pieces
 
-def compute_ls_max_dev_and_fit(i, j, points):
-    """Compute least squares fit and maximum deviation for points[i:j+1]."""
-    if j - i < 1:
-        return 0.0, None, None
-    x = np.array([p[0] for p in points[i:j+1]])
-    y = np.array([p[1] for p in points[i:j+1]])
-    A = np.vstack([x, np.ones(len(x))]).T
-    solution = np.linalg.lstsq(A, y, rcond=None)  # Fixed: np.linalg.lstsq
-    a, b = solution[0]
-    pred = a * x + b
-    devs = np.abs(y - pred)
-    max_dev = np.max(devs)
-    return max_dev, a, b
 
 def compute_min_E_and_fit(i, j, points):
     """Compute minimax (Chebyshev) fit and minimum E for points[i:j+1]."""
@@ -351,35 +338,8 @@ def reconstruct_optimal_points(points, kept, epsilon):
     else:
         return points
 
-def greedy_farthest_L2(pc_linear_fx, epsilon):
-    """Greedy Farthest with Least Squares Check"""
-    points = pc_linear_fx
-    m = len(points)
-    if m < 2:
-        return points, 0, 0
-    given_num_pieces = m - 1
-    kept = [0]
-    current = 0
-    while current < m - 1:
-        found = False
-        for j in range(m - 1, current, -1):
-            max_dev, _, _ = compute_ls_max_dev_and_fit(current, j, points)
-            if max_dev <= epsilon:
-                kept.append(j)
-                current = j
-                found = True
-                break
-        if not found:
-            kept.append(m - 1)
-            break
-    optimal_pc_linear_fx = reconstruct_optimal_points(points, kept, epsilon)
-    optimal_num_pieces = len(optimal_pc_linear_fx) - 1 if len(optimal_pc_linear_fx) > 1 else 0
-    if len(optimal_pc_linear_fx) != len(kept):
-        optimal_pc_linear_fx = points
-        optimal_num_pieces = given_num_pieces
-    return optimal_pc_linear_fx, optimal_num_pieces, given_num_pieces
 
-def greedy_farthest_Linf(pc_linear_fx, epsilon):
+def greedy_farthest(pc_linear_fx, epsilon):
     """Greedy Farthest with Minimax Check"""
     points = pc_linear_fx
     m = len(points)
@@ -407,39 +367,6 @@ def greedy_farthest_Linf(pc_linear_fx, epsilon):
         optimal_num_pieces = given_num_pieces
     return optimal_pc_linear_fx, optimal_num_pieces, given_num_pieces
 
-def recursive_keep_ls(i, j, points, epsilon):
-    """Recursive function for top-down splitting with least squares check."""
-    if i >= j:
-        return []
-    if i + 1 == j:
-        return [i, j]
-    max_dev, a, b = compute_ls_max_dev_and_fit(i, j, points)
-    if max_dev <= epsilon:
-        return [i, j]
-    x = np.array([p[0] for p in points[i:j+1]])
-    y = np.array([p[1] for p in points[i:j+1]])
-    pred = a * x + b
-    devs = np.abs(y - pred)
-    k = i + 1 + np.argmax(devs[1:-1])
-    left = recursive_keep_ls(i, k, points, epsilon)
-    right = recursive_keep_ls(k, j, points, epsilon)
-    return left + right[1:]
-
-def top_down_split_L2(pc_linear_fx, epsilon):
-    """Top-Down Split with Least Squares Check"""
-    points = pc_linear_fx
-    m = len(points)
-    if m < 2:
-        return points, 0, 0
-    given_num_pieces = m - 1
-    kept = recursive_keep_ls(0, m - 1, points, epsilon)
-    kept = sorted(set(kept))  # Remove duplicates
-    optimal_pc_linear_fx = reconstruct_optimal_points(points, kept, epsilon)
-    optimal_num_pieces = len(optimal_pc_linear_fx) - 1 if len(optimal_pc_linear_fx) > 1 else 0
-    if len(optimal_pc_linear_fx) != len(kept):
-        optimal_pc_linear_fx = points
-        optimal_num_pieces = given_num_pieces
-    return optimal_pc_linear_fx, optimal_num_pieces, given_num_pieces
 
 def recursive_keep_minimax(i, j, points, epsilon):
     """Recursive function for top-down splitting with minimax check."""
@@ -459,7 +386,7 @@ def recursive_keep_minimax(i, j, points, epsilon):
     right = recursive_keep_minimax(k, j, points, epsilon)
     return left + right[1:]
 
-def top_down_split_Linf(pc_linear_fx, epsilon):
+def top_down_split(pc_linear_fx, epsilon):
     """Top-Down Split with Minimax Check"""
     points = pc_linear_fx
     m = len(points)

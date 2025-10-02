@@ -8,7 +8,7 @@ from pc_linear_adversarial_search.cpu_parallel import is_within_epsilon
 SAMPLES = 30
 TESTCASES_PER_SAMPLE = 10
 TOTAL_TESTCASES = SAMPLES * TESTCASES_PER_SAMPLE
-TESTCASE_FILE = "grok.py"
+TESTCASE_FILE = "claude.py"
 
 # ---------------------------
 # Validation & duplicates
