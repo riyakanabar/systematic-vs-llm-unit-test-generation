@@ -8,7 +8,7 @@ from grid_search.variants_test import is_within_epsilon
 SAMPLES = 30
 TESTCASES_PER_SAMPLE = 10
 TOTAL_TESTCASES = SAMPLES * TESTCASES_PER_SAMPLE
-TESTCASE_FILE = "copilot.py"
+TESTCASE_FILE = "claude.py"
 
 # ---------------------------
 # Validation & duplicates
