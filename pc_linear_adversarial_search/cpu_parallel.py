@@ -13,7 +13,7 @@ from optimal_algorithms.pc_linear_apx import approximate_pc_linear_fx as optimal
 x_values = range(0, 10)
 y_values = range(1, 9)
 epsilon_values = [0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 6, 7]
-pieces = range(2, 10)
+pieces_range = range(2, 10)
 
 
 def is_within_epsilon(original_fx, approximation, epsilon):
@@ -49,7 +49,7 @@ def generate_test_cases():
     Generator function that yields test cases
     """
     count = 0
-    for num_pieces in pieces:
+    for num_pieces in pieces_range:
         # You need num_pieces + 1 x-points
         x_combinations = list(itertools.combinations(x_values, num_pieces + 1))
 
@@ -105,7 +105,7 @@ def test_algorithm_parallel(algorithm):
         for points, epsilon, count in generate_test_cases():
             yield (points, epsilon, count, algorithm)
 
-    total_cases = count_total_cases(len(x_values), len(y_values), len(epsilon_values), pieces)
+    total_cases = count_total_cases(len(x_values), len(y_values), len(epsilon_values), pieces_range)
     print(f"Estimated total test cases: {total_cases}")
 
     # Use all available CPU cores except one

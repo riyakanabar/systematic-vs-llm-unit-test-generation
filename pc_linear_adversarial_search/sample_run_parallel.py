@@ -12,19 +12,16 @@ from candidate_algorithms.candidate_algos_1 import (
 )
 from candidate_algorithms.candidate_algos_2 import (
     shortest_path_dp as candidate5,
-    greedy_farthest_L2 as candidate6,
-    greedy_farthest_Linf as candidate7,
-    top_down_split_L2 as candidate8,
-    top_down_split_Linf as candidate9,
-    botton_up_merge as candidate10,
-    fixed_knot_LP as candidate11
+    greedy_farthest as candidate6,
+    top_down_split as candidate7,
+    botton_up_merge as candidate8,
 )
-from candidate_algorithms.modified_imai_iri import modified_imai_iri as candidate12
-from candidate_algorithms.free_knot_LP import free_knot_LP as candidate13
+from candidate_algorithms.modified_imai_iri import modified_imai_iri as candidate9
 from cpu_parallel import test_algorithm_parallel
+from numba_jit_parallel import numba_test_algorithm_parallel
 
 if __name__ == "__main__":
     # Set the start method to 'spawn' for Windows compatibility
-    multiprocessing.set_start_method('spawn', force=True)
+    # multiprocessing.set_start_method('spawn', force=True)
 
-    test_algorithm_parallel(candidate12)
+    numba_test_algorithm_parallel(candidate1)
