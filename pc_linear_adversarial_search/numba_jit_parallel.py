@@ -76,41 +76,138 @@ def x_combos(m):
     """
     return itertools.combinations(range(len(x_values)), m)
 
-# ---------------- Worker ----------------
+# # ---------------- Worker ----------------
+# _worker_warmed_up = False
+# def _worker_chunk(args):
+#     """
+#     Process a chunk of y-tuples for one (m, eps, indices) config.
+#     Only stores the slice (start, end) not the full y_batch.
+#     """
+#     global _worker_warmed_up
+#     (m, eps, trans_indices, y_range, x_as_float, algorithm) = args
+#     start, end = y_range
+#
+#     # ---------------- Warm-up ----------------
+#     if not _worker_warmed_up:
+#         dummy_points = np.array([[0.0, 2.0], [1.0, 3.0], [2.0, 1.0]], dtype=np.float64)
+#         dummy_apx = np.array([[0.0, 2.0], [2.0, 1.0]], dtype=np.float64)
+#         _ = numba_is_within_epsilon(dummy_points, dummy_points, 0.1)
+#         _ = numba_approximate_pc_linear_fx(dummy_points, 0.1)
+#         _worker_warmed_up = True
+#     # ------------------------------------------
+#
+#     tested = epsilon_fail = optimality_fail = total_fail = 0
+#     trans_xs = np.array([x_as_float[i] for i in trans_indices], dtype=np.float64)
+#
+#     # regenerate product lazily
+#     y_iter = itertools.islice(itertools.product(y_values, repeat=m+1), start, end)
+#     for y_tuple in y_iter:
+#         points = np.array([(float(x), float(y)) for x, y in zip(trans_xs, y_tuple)], dtype=np.float64)
+#
+#         # Candidate algo
+#         apx_fx, alg_pieces, _ = algorithm(points, eps)
+#         apx_fx = np.array(apx_fx, dtype=np.float64)
+#         # Oracle
+#         optimal_pc_fx, optimal_num_pieces, given_num_pieces = numba_approximate_pc_linear_fx(points, eps)
+#
+#         test1 = not numba_is_within_epsilon(points, apx_fx, eps)
+#         test2 = (alg_pieces > optimal_num_pieces)
+#
+#         if test1: epsilon_fail += 1
+#         if test2: optimality_fail += 1
+#         if test1 or test2: total_fail += 1
+#         tested += 1
+#
+#     return tested, epsilon_fail, optimality_fail, total_fail
+
+# ---------------- Parallel driver ----------------
+import numpy as np
+from numba import njit
+# keep your existing imports…
+
+# ---------- keep your numba_is_within_epsilon / round2 as-is ----------
+
+
+# === FAST Y-COMBO SLICE (no itertools, no prange) =====================
+def _y_slice_rows(m_plus_1: int, start: int, end: int, y_values_array: np.ndarray) -> np.ndarray:
+    """
+    Return y_rows of shape (end-start, m_plus_1) that represent the slice of
+    cartesian product(y_values, repeat=m_plus_1) for indices [start, end).
+    Uses base-K decomposition; no itertools and no large full meshgrid.
+    """
+    K = y_values_array.shape[0]
+    count = end - start
+    idx = np.arange(start, end, dtype=np.int64)
+
+    rows = np.empty((count, m_plus_1), dtype=np.float64)
+    # fill from the rightmost "digit" to the left
+    for col in range(m_plus_1 - 1, -1, -1):
+        rows[:, col] = y_values_array[idx % K]
+        idx //= K
+    return rows
+
+
+# === SAFE ARRAY COERCION (lightweight) =================================
+def _to_xy2(a) -> np.ndarray:
+    """Coerce list/tuple/array-of-pairs into (N,2) float64 C-contig ndarray (cheap if already ok)."""
+    if isinstance(a, np.ndarray) and a.ndim == 2 and a.shape[1] == 2 and a.dtype == np.float64 and a.flags['C_CONTIGUOUS']:
+        return a
+    a = np.asarray(a, dtype=np.float64)
+    if a.ndim == 1:
+        if a.size % 2 != 0:
+            raise ValueError("Cannot reshape 1D data into pairs")
+        a = a.reshape(-1, 2)
+    elif a.ndim == 2 and a.shape[1] != 2:
+        a = np.vstack(a).astype(np.float64, copy=False)
+    return np.ascontiguousarray(a, dtype=np.float64)
+
+
+# === WORKER (no prange, no itertools.product in the hot path) ==========
 _worker_warmed_up = False
 def _worker_chunk(args):
     """
     Process a chunk of y-tuples for one (m, eps, indices) config.
-    Only stores the slice (start, end) not the full y_batch.
+    Faster: no prange, no itertools.product; reuse arrays; minimal conversions.
     """
     global _worker_warmed_up
     (m, eps, trans_indices, y_range, x_as_float, algorithm) = args
     start, end = y_range
 
-    # ---------------- Warm-up ----------------
+    # ---- warm up numba in this process once ----
     if not _worker_warmed_up:
         dummy_points = np.array([[0.0, 2.0], [1.0, 3.0], [2.0, 1.0]], dtype=np.float64)
-        dummy_apx = np.array([[0.0, 2.0], [2.0, 1.0]], dtype=np.float64)
         _ = numba_is_within_epsilon(dummy_points, dummy_points, 0.1)
         _ = numba_approximate_pc_linear_fx(dummy_points, 0.1)
         _worker_warmed_up = True
-    # ------------------------------------------
 
     tested = epsilon_fail = optimality_fail = total_fail = 0
-    trans_xs = np.array([x_as_float[i] for i in trans_indices], dtype=np.float64)
 
-    # regenerate product lazily
-    y_iter = itertools.islice(itertools.product(y_values, repeat=m+1), start, end)
-    for y_tuple in y_iter:
-        points = np.array([(float(x), float(y)) for x, y in zip(trans_xs, y_tuple)], dtype=np.float64)
+    # fixed x’s for this case (N=m+1)
+    trans_xs = np.asarray([x_as_float[i] for i in trans_indices], dtype=np.float64)
+    m_plus_1 = len(trans_xs)
 
-        # Candidate algo
+    # build the y rows for this slice with base-K indexing (fast, no Python loops over tuples)
+    y_vals_arr = np.asarray(y_values, dtype=np.float64)  # one-time conversion
+    y_rows = _y_slice_rows(m_plus_1, start, end, y_vals_arr)  # shape: (batch, m+1)
+
+    # preallocate points (N,2) and set the x column once
+    points = np.empty((m_plus_1, 2), dtype=np.float64)
+    points[:, 0] = trans_xs
+
+    for i in range(y_rows.shape[0]):
+        # just swap in the current y row (no allocations)
+        points[:, 1] = y_rows[i]
+
+        # --- candidate algorithm ---
         apx_fx, alg_pieces, _ = algorithm(points, eps)
-        apx_fx = np.array(apx_fx, dtype=np.float64)
-        # Oracle
+        apx_fx = _to_xy2(apx_fx)  # ensure (M,2) float64 C
+
+        # --- oracle ---
         optimal_pc_fx, optimal_num_pieces, given_num_pieces = numba_approximate_pc_linear_fx(points, eps)
 
-        test1 = not numba_is_within_epsilon(points, apx_fx, eps)
+        # --- tests (JITed epsilon check) ---
+        ok, _ = numba_is_within_epsilon(points, apx_fx, eps)
+        test1 = not ok
         test2 = (alg_pieces > optimal_num_pieces)
 
         if test1: epsilon_fail += 1
@@ -120,7 +217,6 @@ def _worker_chunk(args):
 
     return tested, epsilon_fail, optimality_fail, total_fail
 
-# ---------------- Parallel driver ----------------
 def numba_test_algorithm_parallel(algorithm,
                             max_workers=None,
                             chunk_size=500000,
