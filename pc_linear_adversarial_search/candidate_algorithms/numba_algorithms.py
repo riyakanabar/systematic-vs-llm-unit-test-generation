@@ -7,7 +7,7 @@ def numba_distance_point_to_line_segment(px, py, x1, y1, x2, y2):
     dx = x2 - x1
     dy = y2 - y1
     if dx == 0.0 and dy == 0.0:
-        return np.abs(py - y1)
+        return abs(py - y1)
     # projection factor t in [0,1]
     t = ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)
     if t < 0.0:
@@ -16,7 +16,7 @@ def numba_distance_point_to_line_segment(px, py, x1, y1, x2, y2):
         t = 1.0
     proj_x = x1 + t * dx
     proj_y = y1 + t * dy
-    return np.abs(py - proj_y)   # L∞ vertical deviation
+    return abs(py - proj_y)   # L∞ vertical deviation
 
 @njit(fastmath=True)
 def numba_greedy_approximation(points, epsilon):

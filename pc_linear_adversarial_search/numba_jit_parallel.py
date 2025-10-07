@@ -38,7 +38,7 @@ def numba_is_within_epsilon(original_fx, approximation, epsilon):
         x = original_fx[oi, 0]
         orig_y = original_fx[oi, 1]
         approx_y = np.nan
-        rounded_approx_y = np.nan
+        # rounded_approx_y = np.nan
 
         # Find segment containing x
         for i in range(n_appr - 1):
@@ -48,22 +48,22 @@ def numba_is_within_epsilon(original_fx, approximation, epsilon):
             y2 = approximation[i + 1, 1]
             if x1 <= x <= x2:
                 dx = x2 - x1
-                if np.abs(dx) < 1e-12:
+                if abs(dx) < 1e-12:
                     slope = 0.0
                 else:
                     slope = (y2 - y1) / dx
                 intercept = y1 - slope * x1
                 approx_y = slope * x + intercept
-                rounded_approx_y = round2(approx_y)
+                # rounded_approx_y = round2(approx_y)
                 break
 
         # Handle x outside range
         if np.isnan(approx_y) and n_appr > 0:
             approx_y = approximation[-1, 1]
-            rounded_approx_y = round2(approx_y)
+            # rounded_approx_y = round2(approx_y)
 
         # Check closeness
-        if np.abs(orig_y - rounded_approx_y) > epsilon + 1e-9 * np.abs(orig_y):
+        if abs(orig_y - approx_y) > epsilon + 1e-9 * abs(orig_y):
             # Return False with empty string because numba can’t return formatted text
             return False, 0.0  # placeholder second value
 
