@@ -127,6 +127,9 @@ def _worker_chunk(args):
     if not _worker_warmed_up:
         dummy_points = np.array([[0.0, 2.0], [1.0, 3.0], [2.0, 1.0]], dtype=np.float64)
         _ = numba_is_within_epsilon(dummy_points, dummy_points, 0.1)
+        _ = algorithm(dummy_points, 0.1)
+        _ = numba_approximate_pc_linear_fx(dummy_points,0.1)
+
         _worker_warmed_up = True
     # -----------------------------------------------------------------------
 
