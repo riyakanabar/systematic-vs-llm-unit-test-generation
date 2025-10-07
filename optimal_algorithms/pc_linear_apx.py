@@ -159,18 +159,18 @@ def approximate_pc_linear_fx(pc_linear_fx, w):
     return optimal_pc_linear_fx, optimal_num_pieces, given_num_pieces
 
 def reconstruct_piecewise_function(pc_linear_fx):
-    pivot_points = sorted(pc_linear_fx, key=lambda p: p[0])
+    # pivot_points = sorted(pc_linear_fx, key=lambda p: p[0])
     y_values = []
-    for i in range(len(pivot_points) - 1):
-        start_point = pivot_points[i]
-        end_point = pivot_points[i + 1]
+    for i in range(len(pc_linear_fx) - 1):
+        start_point = pc_linear_fx[i]
+        end_point = pc_linear_fx[i + 1]
         if end_point[0] == start_point[0]:
             continue
         slope = (end_point[1] - start_point[1]) / (end_point[0] - start_point[0])
         intercept = start_point[1] - slope * start_point[0]
         for x in range(int(start_point[0]), int(end_point[0])):
             y_values.append(x * slope + intercept)
-    y_values.append(pivot_points[-1][1])
+    y_values.append(pc_linear_fx[-1][1])
     return np.array(y_values)
 def plot_piecewise_linear_approximation(pc_linear_fx, optimal_pc_linear_fx, epsilon):
     """

@@ -76,18 +76,18 @@ def reconstruct_piecewise_function(pc_linear_fx):
     if n <= 1:
         return np.empty(0, dtype=np.float64)
 
-    # Sort by x
-    idx = np.argsort(pc_linear_fx[:, 0])
-    pivot_points = pc_linear_fx[idx]
+    # # Sort by x
+    # idx = np.argsort(pc_linear_fx[:, 0])
+    # pivot_points = pc_linear_fx[idx]
 
     # Preallocate output
-    max_len = int(pivot_points[-1, 0] - pivot_points[0, 0]) + 2
+    max_len = int(pc_linear_fx[-1, 0] - pc_linear_fx[0, 0]) + 2
     y_values = np.empty(max_len, dtype=np.float64)
     out_i = 0
 
     for i in range(n - 1):
-        x1, y1 = pivot_points[i]
-        x2, y2 = pivot_points[i + 1]
+        x1, y1 = pc_linear_fx[i]
+        x2, y2 = pc_linear_fx[i + 1]
 
         if x2 == x1:
             continue
@@ -100,7 +100,7 @@ def reconstruct_piecewise_function(pc_linear_fx):
             out_i += 1
             xi += 1
 
-    y_values[out_i] = pivot_points[-1, 1]
+    y_values[out_i] = pc_linear_fx[-1, 1]
     return y_values[:out_i + 1]
 
 def numba_approximate_pc_linear_fx(pc_linear_fx, w):
