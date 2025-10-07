@@ -1,5 +1,4 @@
 import sys
-import multiprocessing
 import os
 
 # Add parent directory to path to import from parent directory
@@ -19,10 +18,7 @@ from candidate_algorithms.candidate_algos_2 import (
 from candidate_algorithms.modified_imai_iri import modified_imai_iri as candidate9
 from cpu_parallel import test_algorithm_parallel
 from numba_jit_parallel import numba_test_algorithm_parallel
-from candidate_algorithms.numba_algorithms import numba_greedy_approximation
+from candidate_algorithms.numba_algorithms import greedy_approximation_numba
 
 if __name__ == "__main__":
-    # Set the start method to 'spawn' for Windows compatibility
-    # multiprocessing.set_start_method('spawn', force=True)
-
-    numba_test_algorithm_parallel(numba_greedy_approximation)
+    numba_test_algorithm_parallel(greedy_approximation_numba)
