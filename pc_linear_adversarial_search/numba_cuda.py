@@ -10,7 +10,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from optimal_algorithms.cuda_pc_linear_apx import approx_pc_linear_fx_device
 from cpu_parallel import x_values, y_values, epsilon_values, pieces_range, count_total_cases
 from numba import njit
-
+from candidate_algorithms.cuda_algos import greedy_approximation_device
 
 GLOBAL_XVALS = np.asarray(x_values, dtype=np.float64)
 GLOBAL_YVALS = np.asarray(y_values, dtype=np.float64)
@@ -185,27 +185,36 @@ def cuda_worker_chunk(x_vals, y_vals, trans_xs, eps, base, start, end,
         points_x[p] = trans_xs[p]
         points_y[p] = y_vals[idx_buf[p]]
 
-    # ---------- Buffers for optimizer ----------
-    MAX_OUT = 16 #32
-    CAP_YBUF = 256 #1024
-    Q_CAP = 64 #256
-    out_x = cuda.local.array(MAX_OUT, dtype=float64)
-    out_y = cuda.local.array(MAX_OUT, dtype=float64)
-    ybuf = cuda.local.array(CAP_YBUF, dtype=float64)
-    q_xy = cuda.local.array(Q_CAP, dtype=float64)
+    MAX_OUT = 16  # 32
+    CAP_YBUF = 256  # 1024
+    Q_CAP = 64  # 256
+    # candidate buffers
+    out_alg_x = cuda.local.array(MAX_OUT, dtype=float64)
+    out_alg_y = cuda.local.array(MAX_OUT, dtype=float64)
+    ybuf_alg = cuda.local.array(CAP_YBUF, dtype=float64)
+    q_alg = cuda.local.array(Q_CAP, dtype=float64)
 
-
-    test1 = not device_is_within_epsilon(points_x, points_y,
-                                  points_x, points_y,
-                                  m_plus_1, m_plus_1, eps)
-
-    # ---------- Call optimizer (device version) ----------
+    # optimal oracle buffers
+    out_opt_x = cuda.local.array(MAX_OUT, dtype=float64)
+    out_opt_y = cuda.local.array(MAX_OUT, dtype=float64)
+    ybuf_opt = cuda.local.array(CAP_YBUF, dtype=float64)
+    q_opt = cuda.local.array(Q_CAP, dtype=float64)
     n_piv = m_plus_1
-    count = approx_pc_linear_fx_device(points_x, points_y, n_piv, eps,
-                                       out_x, out_y, MAX_OUT,
-                                       ybuf, CAP_YBUF,
-                                       q_xy, Q_CAP)
-    test2 = count > n_piv
+
+    count_alg = greedy_approximation_device(points_x, points_y, n_piv, eps,
+                                           out_alg_x, out_alg_y, MAX_OUT,
+                                           ybuf_alg, CAP_YBUF,
+                                           q_alg, Q_CAP)
+
+    count_opt = approx_pc_linear_fx_device(points_x, points_y, n_piv, eps,
+                                           out_opt_x, out_opt_y, MAX_OUT,
+                                           ybuf_opt, CAP_YBUF,
+                                           q_opt, Q_CAP)
+    test1 = not device_is_within_epsilon(points_x, points_y,
+                                  out_alg_x, out_alg_y,
+                                  n_piv, count_alg, eps)
+
+    test2 = count_alg > count_opt
 
     if test1:
         cuda.atomic.add(epsilon_fails, 0, 1)
