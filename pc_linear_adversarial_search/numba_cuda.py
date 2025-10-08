@@ -202,9 +202,7 @@ def cuda_worker_chunk(x_vals, y_vals, trans_xs, eps, base, start, end,
     n_piv = m_plus_1
 
     count_alg = greedy_approximation_device(points_x, points_y, n_piv, eps,
-                                           out_alg_x, out_alg_y, MAX_OUT,
-                                           ybuf_alg, CAP_YBUF,
-                                           q_alg, Q_CAP)
+                                           out_alg_x, out_alg_y, MAX_OUT)
 
     count_opt = approx_pc_linear_fx_device(points_x, points_y, n_piv, eps,
                                            out_opt_x, out_opt_y, MAX_OUT,
