@@ -22,4 +22,18 @@ from candidate_algorithms.numba_algorithms import greedy_approximation_numba
 from numba_cuda import test_algorithm
 
 if __name__ == "__main__":
-    test_algorithm(greedy_approximation_numba)
+    test_algorithm()
+    # Given
+    # cases_per_second = 250000 #41_542_118
+    # total_cases = 34_867_814_400
+    #
+    # # Calculate time in seconds
+    # time_seconds = total_cases / cases_per_second
+    #
+    # # Convert to hours, minutes, seconds
+    # hours = int(time_seconds // 3600)
+    # minutes = int((time_seconds % 3600) // 60)
+    # seconds = time_seconds % 60
+    #
+    # print(f"Time taken: {hours}h {minutes}m {seconds:.2f}s")
+
