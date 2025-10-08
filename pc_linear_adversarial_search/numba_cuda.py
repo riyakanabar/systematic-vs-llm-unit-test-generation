@@ -186,9 +186,9 @@ def cuda_worker_chunk(x_vals, y_vals, trans_xs, eps, base, start, end,
         points_y[p] = y_vals[idx_buf[p]]
 
     # ---------- Buffers for optimizer ----------
-    MAX_OUT = 32
-    CAP_YBUF = 1024
-    Q_CAP = 256
+    MAX_OUT = 16 #32
+    CAP_YBUF = 256 #1024
+    Q_CAP = 64 #256
     out_x = cuda.local.array(MAX_OUT, dtype=float64)
     out_y = cuda.local.array(MAX_OUT, dtype=float64)
     ybuf = cuda.local.array(CAP_YBUF, dtype=float64)
@@ -220,7 +220,7 @@ def _worker_chunk_cuda(args):
     start, end = y_range
     total_cases = end - start
 
-    threads_per_block = 128
+    threads_per_block = 64 #128
     blocks_per_grid = (total_cases + threads_per_block - 1) // threads_per_block
 
     epsilon_fails = cuda.to_device(np.zeros(1, dtype=np.int64))
@@ -324,7 +324,7 @@ _worker_warmed_up = False
 
 
 # ---------------- Parallel driver ----------------
-def numba_test_algorithm_parallel(algorithm,
+def test_algorithm(algorithm,
                             max_workers=None,
                             chunk_size=500000,
                             show_progress=True):
