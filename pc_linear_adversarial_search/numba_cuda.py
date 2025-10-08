@@ -87,6 +87,56 @@ def numba_is_within_epsilon(original_fx, approximation, epsilon):
             return False, 0.0
     return True, 0.0
 
+from numba import cuda, float64
+import math
+
+@cuda.jit(device=True)
+def device_is_within_epsilon(orig_x, orig_y, appr_x, appr_y, n_orig, n_appr, eps):
+    """
+    GPU device version of numba_is_within_epsilon.
+    orig_x, orig_y, appr_x, appr_y are 1D float64 arrays on device/local memory.
+    Returns True if all original points are within epsilon tolerance of approximation.
+    """
+    # Handle degenerate case (constant segment)
+    if n_appr < 2:
+        ay0 = appr_y[0] if n_appr == 1 else 0.0
+        for oi in range(n_orig):
+            diff = abs(orig_y[oi] - ay0)
+            if diff > eps + 1e-9 * abs(orig_y[oi]):
+                return False
+        return True
+
+    seg_n = n_appr - 1
+    # Precompute slopes
+    slopes = cuda.local.array(64, dtype=float64)  # adjust if you ever have >64 segments
+    for i in range(seg_n):
+        dx = appr_x[i+1] - appr_x[i]
+        if abs(dx) < 1e-12:
+            slopes[i] = 0.0
+        else:
+            slopes[i] = (appr_y[i+1] - appr_y[i]) / dx
+
+    # For each original point
+    for oi in range(n_orig):
+        x = orig_x[oi]
+        y = orig_y[oi]
+
+        # binary search for segment index
+        lo = 0
+        hi = n_appr - 1
+        while hi - lo > 1:
+            mid = (lo + hi) // 2
+            if appr_x[mid] <= x:
+                lo = mid
+            else:
+                hi = mid
+
+        y_hat = appr_y[lo] + slopes[lo] * (x - appr_x[lo])
+        if abs(y - y_hat) > eps + 1e-9 * abs(y):
+            return False
+
+    return True
+
 
 def x_combos(m):
     """
@@ -135,17 +185,12 @@ def cuda_worker_chunk(x_vals, y_vals, trans_xs, eps, base, start, end,
         points_x[p] = trans_xs[p]
         points_y[p] = y_vals[idx_buf[p]]
 
-    # (Simplified placeholder checks)
-    # Replace with call to numba_is_within_epsilon and algorithm if ported
-    eps_fail = 0
-    opt_fail = 0
 
-    # Example simple check (for demonstration)
-    for i in range(m_plus_1):
-        if abs(points_y[i]) > eps:  # dummy check
-            eps_fail = 1
+    ok = device_is_within_epsilon(points_x, points_y,
+                                  points_x, points_y,
+                                  m_plus_1, m_plus_1, eps)
 
-    if eps_fail:
+    if not ok:
         cuda.atomic.add(epsilon_fails, 0, 1)
         cuda.atomic.add(total_fails, 0, 1)
 
