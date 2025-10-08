@@ -7,7 +7,7 @@ import time
 from concurrent.futures import ProcessPoolExecutor
 from numba import njit
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from optimal_algorithms.numba_pc_linear_apx import numba_approximate_pc_linear_fx
+from optimal_algorithms.cuda_pc_linear_apx import approx_pc_linear_fx_device
 from cpu_parallel import x_values, y_values, epsilon_values, pieces_range, count_total_cases
 from numba import njit
 
@@ -185,14 +185,35 @@ def cuda_worker_chunk(x_vals, y_vals, trans_xs, eps, base, start, end,
         points_x[p] = trans_xs[p]
         points_y[p] = y_vals[idx_buf[p]]
 
+    # ---------- Buffers for optimizer ----------
+    MAX_OUT = 32
+    CAP_YBUF = 1024
+    Q_CAP = 256
+    out_x = cuda.local.array(MAX_OUT, dtype=float64)
+    out_y = cuda.local.array(MAX_OUT, dtype=float64)
+    ybuf = cuda.local.array(CAP_YBUF, dtype=float64)
+    q_xy = cuda.local.array(Q_CAP, dtype=float64)
 
-    ok = device_is_within_epsilon(points_x, points_y,
+
+    test1 = not device_is_within_epsilon(points_x, points_y,
                                   points_x, points_y,
                                   m_plus_1, m_plus_1, eps)
 
-    if not ok:
+    # ---------- Call optimizer (device version) ----------
+    n_piv = m_plus_1
+    count = approx_pc_linear_fx_device(points_x, points_y, n_piv, eps,
+                                       out_x, out_y, MAX_OUT,
+                                       ybuf, CAP_YBUF,
+                                       q_xy, Q_CAP)
+    test2 = count > n_piv
+
+    if test1:
         cuda.atomic.add(epsilon_fails, 0, 1)
+    if test2:
+        cuda.atomic.add(optimality_fails, 0, 1)
+    if test1 or test2:
         cuda.atomic.add(total_fails, 0, 1)
+
 
 def _worker_chunk_cuda(args):
     (m, eps, trans_indices, y_range) = args
@@ -231,75 +252,75 @@ def _worker_chunk_cuda(args):
 # -------- optimized worker function --------
 _worker_warmed_up = False
 
-def _worker_chunk(args):
-    """
-    Process a chunk of y-tuples for one (m, eps, indices) config.
-    Optimized for minimal allocations and Python overhead.
-    """
-    global _worker_warmed_up
-    (m, eps, trans_indices, y_range) = args
-    x_vals = GLOBAL_XVALS
-    y_vals = GLOBAL_YVALS
-    algorithm = GLOBAL_ALGO
-    start, end = y_range
-
-    # --------------- Warm-up (JIT compile numba kernels once) ---------------
-    if not _worker_warmed_up:
-        dummy_points = np.array([[0.0, 2.0], [1.0, 3.0], [2.0, 1.0]], dtype=np.float64)
-        _ = numba_is_within_epsilon(dummy_points, dummy_points, 0.1)
-        _ = algorithm(dummy_points, 0.1)
-        _ = numba_approximate_pc_linear_fx(dummy_points,0.1)
-
-        _worker_warmed_up = True
-    # -----------------------------------------------------------------------
-
-    tested = epsilon_fail = optimality_fail = total_fail = 0
-
-    x_arr = GLOBAL_XVALS
-    trans_idx = np.asarray(trans_indices, dtype=np.int64)
-    trans_xs = x_arr[trans_idx]
-
-    m_plus_1 = trans_xs.shape[0]
-
-    # preallocate reusable arrays
-    points = np.empty((m_plus_1, 2), dtype=np.float64)
-    points[:, 0] = trans_xs  # x fixed
-    idx_buf = np.empty(m_plus_1, dtype=np.int64)
-    #y_vals = np.asarray(y_values, dtype=np.float64)
-    base = GLOBAL_YVALS.shape[0]
-
-    # iterate through the range using base-B digit expansion
-    for linear_idx in range(start, end):
-        _digits_base(linear_idx, base, m_plus_1, idx_buf)
-
-        # fill y-values
-        for k in range(m_plus_1):
-            points[k, 1] = GLOBAL_YVALS[idx_buf[k]]
-
-        # candidate algorithm
-        apx_fx, alg_pieces, _ = algorithm(points, eps)
-        if not isinstance(apx_fx, np.ndarray):
-            apx_fx = np.asarray(apx_fx, dtype=np.float64)
-        else:
-            apx_fx = apx_fx.astype(np.float64, copy=False)
-
-        # oracle (optimal)
-        optimal_pc_fx, optimal_num_pieces, given_num_pieces = numba_approximate_pc_linear_fx(points, eps)
-
-        # tests
-        test1 = not numba_is_within_epsilon(points, apx_fx, eps)
-        test2 = alg_pieces > optimal_num_pieces
-
-        if test1:
-            epsilon_fail += 1
-        if test2:
-            optimality_fail += 1
-        if test1 or test2:
-            total_fail += 1
-
-        tested += 1
-
-    return tested, epsilon_fail, optimality_fail, total_fail
+# def _worker_chunk(args):
+#     """
+#     Process a chunk of y-tuples for one (m, eps, indices) config.
+#     Optimized for minimal allocations and Python overhead.
+#     """
+#     global _worker_warmed_up
+#     (m, eps, trans_indices, y_range) = args
+#     x_vals = GLOBAL_XVALS
+#     y_vals = GLOBAL_YVALS
+#     algorithm = GLOBAL_ALGO
+#     start, end = y_range
+#
+#     # --------------- Warm-up (JIT compile numba kernels once) ---------------
+#     if not _worker_warmed_up:
+#         dummy_points = np.array([[0.0, 2.0], [1.0, 3.0], [2.0, 1.0]], dtype=np.float64)
+#         _ = numba_is_within_epsilon(dummy_points, dummy_points, 0.1)
+#         _ = algorithm(dummy_points, 0.1)
+#         _ = numba_approximate_pc_linear_fx(dummy_points,0.1)
+#
+#         _worker_warmed_up = True
+#     # -----------------------------------------------------------------------
+#
+#     tested = epsilon_fail = optimality_fail = total_fail = 0
+#
+#     x_arr = GLOBAL_XVALS
+#     trans_idx = np.asarray(trans_indices, dtype=np.int64)
+#     trans_xs = x_arr[trans_idx]
+#
+#     m_plus_1 = trans_xs.shape[0]
+#
+#     # preallocate reusable arrays
+#     points = np.empty((m_plus_1, 2), dtype=np.float64)
+#     points[:, 0] = trans_xs  # x fixed
+#     idx_buf = np.empty(m_plus_1, dtype=np.int64)
+#     #y_vals = np.asarray(y_values, dtype=np.float64)
+#     base = GLOBAL_YVALS.shape[0]
+#
+#     # iterate through the range using base-B digit expansion
+#     for linear_idx in range(start, end):
+#         _digits_base(linear_idx, base, m_plus_1, idx_buf)
+#
+#         # fill y-values
+#         for k in range(m_plus_1):
+#             points[k, 1] = GLOBAL_YVALS[idx_buf[k]]
+#
+#         # candidate algorithm
+#         apx_fx, alg_pieces, _ = algorithm(points, eps)
+#         if not isinstance(apx_fx, np.ndarray):
+#             apx_fx = np.asarray(apx_fx, dtype=np.float64)
+#         else:
+#             apx_fx = apx_fx.astype(np.float64, copy=False)
+#
+#         # oracle (optimal)
+#         optimal_pc_fx, optimal_num_pieces, given_num_pieces = numba_approximate_pc_linear_fx(points, eps)
+#
+#         # tests
+#         test1 = not numba_is_within_epsilon(points, apx_fx, eps)
+#         test2 = alg_pieces > optimal_num_pieces
+#
+#         if test1:
+#             epsilon_fail += 1
+#         if test2:
+#             optimality_fail += 1
+#         if test1 or test2:
+#             total_fail += 1
+#
+#         tested += 1
+#
+#     return tested, epsilon_fail, optimality_fail, total_fail
 
 
 # ---------------- Parallel driver ----------------
