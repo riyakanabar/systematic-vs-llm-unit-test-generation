@@ -227,12 +227,22 @@ def _worker_chunk_cuda(args):
 
     cuda.synchronize()
 
-    return (
+    res = (
         total_cases,
         int(epsilon_fails.copy_to_host()[0]),
         int(optimality_fails.copy_to_host()[0]),
         int(total_fails.copy_to_host()[0]),
     )
+
+    # cleanup
+    epsilon_fails.close()
+    optimality_fails.close()
+    total_fails.close()
+    cuda.close()
+    import gc;
+    gc.collect()
+
+    return res
 
 def test_algorithm(max_workers=None, chunk_size=500000,show_progress=True):
     """
