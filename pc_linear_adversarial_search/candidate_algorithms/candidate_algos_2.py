@@ -18,7 +18,6 @@ def _feasible_fixed_endpoints(pts: List[Point], i: int, j: int, eps: float) -> b
             return False
     return True
 def shortest_path_dp(pc_linear_fx: List[Point], epsilon: float):
-    """Optimal (minimum segments) vertex-restricted simplification under vertical L∞."""
     pts = pc_linear_fx
     n = len(pts) - 1
     # Build visibility list nexts[i] = {j>i | segment i->j feasible}

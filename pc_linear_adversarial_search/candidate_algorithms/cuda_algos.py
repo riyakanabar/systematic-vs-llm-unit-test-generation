@@ -154,73 +154,6 @@ def improved_greedy_with_lookahead_dev(points_x, points_y, n, epsilon, lookahead
     return out_count
 
 @cuda.jit(device=True)
-def branch_and_bound_device(points_x, points_y, n, epsilon,
-                            out_x, out_y, max_out):
-    """
-    Iterative Branch and Bound (device-safe, no recursion)
-    Finds minimal-piece approximation under ε tolerance.
-    """
-    # === Precompute validity matrix ===
-    valid = cuda.local.array((16, 16), dtype=boolean)  # supports up to 16 points
-    for i in range(n):
-        for j in range(i + 1, n):
-            valid[i, j] = is_valid_segment_dev(points_x, points_y, i, j, epsilon)
-        for j in range(0, i + 1):
-            valid[i, j] = False  # unused region
-
-    # === Stack for DFS ===
-    stack = cuda.local.array(64, dtype=int32)
-    depth = 1
-    stack[0] = 0  # start from first point
-
-    best_path = cuda.local.array(16, dtype=int32)
-    best_len = n + 1  # initially infinite
-
-    while depth > 0:
-        pos = stack[depth - 1]
-
-        if pos == n - 1:
-            # Found a full path (reached last point)
-            if depth < best_len:
-                best_len = depth
-                for k in range(depth):
-                    best_path[k] = stack[k]
-            depth -= 1
-            continue
-
-        extended = False
-        for nxt in range(n - 1, pos, -1):  # reverse order for DFS-like behavior
-            if valid[pos, nxt] and depth < 16:
-                stack[depth] = nxt
-                depth += 1
-                extended = True
-                break
-
-        if not extended:
-            depth -= 1  # backtrack
-
-    # === Construct result ===
-    if best_len == n + 1:
-        # no valid segmentation found — return input
-        count = n
-        if count > max_out:
-            count = max_out
-        for i in range(count):
-            out_x[i] = points_x[i]
-            out_y[i] = points_y[i]
-        return count
-
-    count = best_len
-    if count > max_out:
-        count = max_out
-    for i in range(count):
-        out_x[i] = points_x[best_path[i]]
-        out_y[i] = points_y[best_path[i]]
-
-    return count
-
-
-@cuda.jit(device=True)
 def douglas_peucker_device(points_x, points_y, n, epsilon,
                            out_x, out_y, max_out):
     """
@@ -299,6 +232,106 @@ def douglas_peucker_device(points_x, points_y, n, epsilon,
             count += 1
 
     return count
+
+
+# =====================================================
+# Helper: compute y on line (same as _y_on_line)
+# =====================================================
+@cuda.jit(device=True, inline=True)
+def y_on_line_dev(x, x1, y1, x2, y2):
+    if x2 == x1:
+        return y1  # degenerate safeguard
+    t = (x - x1) / (x2 - x1)
+    return y1 + t * (y2 - y1)
+
+
+# =====================================================
+# Feasibility check (fixed endpoints)
+# =====================================================
+@cuda.jit(device=True, inline=True)
+def feasible_fixed_endpoints_dev(points_x, points_y, i, j, eps):
+    x1 = points_x[i]
+    y1 = points_y[i]
+    x2 = points_x[j]
+    y2 = points_y[j]
+    if x2 == x1:
+        return False
+    for k in range(i + 1, j):
+        xk = points_x[k]
+        yk = points_y[k]
+        yhat = y_on_line_dev(xk, x1, y1, x2, y2)
+        if abs(yk - yhat) > eps:
+            return False
+    return True
+
+
+# =====================================================
+# Shortest Path Dynamic Programming (device version)
+# =====================================================
+@cuda.jit(device=True)
+def shortest_path_dp_device(points_x, points_y, n, eps,
+                            out_x, out_y, max_out):
+    """
+    GPU-compatible version of shortest-path DP (optimal segmentation).
+    Returns number of output pivots.
+    """
+    INF = 10**9
+    MAX_N = 128  # supports up to 128 input points
+
+    # dp and prev arrays
+    dp = cuda.local.array(MAX_N, dtype=int32)
+    prev = cuda.local.array(MAX_N, dtype=int32)
+
+    for i in range(MAX_N):
+        dp[i] = INF
+        prev[i] = -1
+
+    dp[0] = 0
+
+    # === Main DP ===
+    for i in range(n):
+        if dp[i] == INF:
+            continue
+        for j in range(i + 1, n):
+            if feasible_fixed_endpoints_dev(points_x, points_y, i, j, eps):
+                if dp[i] + 1 < dp[j]:
+                    dp[j] = dp[i] + 1
+                    prev[j] = i
+
+    # === Reconstruct path ===
+    if dp[n - 1] == INF:
+        # no feasible solution → copy input
+        count = n if n < max_out else max_out
+        for i in range(count):
+            out_x[i] = points_x[i]
+            out_y[i] = points_y[i]
+        return count
+
+    # Collect indices backward
+    idx_buf = cuda.local.array(MAX_N, dtype=int32)
+    idx_len = 0
+    cur = n - 1
+    while cur != -1 and idx_len < MAX_N:
+        idx_buf[idx_len] = cur
+        idx_len += 1
+        cur = prev[cur]
+
+    # reverse indices
+    for i in range(idx_len // 2):
+        tmp = idx_buf[i]
+        idx_buf[i] = idx_buf[idx_len - 1 - i]
+        idx_buf[idx_len - 1 - i] = tmp
+
+    # write points to output
+    count = idx_len
+    if count > max_out:
+        count = max_out
+    for i in range(count):
+        out_x[i] = points_x[idx_buf[i]]
+        out_y[i] = points_y[idx_buf[i]]
+
+    return count
+
 
 
 
