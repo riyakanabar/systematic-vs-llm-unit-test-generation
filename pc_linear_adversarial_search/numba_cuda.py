@@ -8,7 +8,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from optimal_algorithms.cuda_pc_linear_apx import approx_pc_linear_fx_device
 from cpu_parallel import x_values, y_values, epsilon_values, pieces_range, count_total_cases
 from numba import njit, cuda, float64, int64
-from candidate_algorithms.cuda_algos import greedy_approximation_device, improved_greedy_with_lookahead_dev, shortest_path_dp_device
+from candidate_algorithms.cuda_algos import greedy_approximation_device, improved_greedy_with_lookahead_dev, shortest_path_dp_device, modified_imai_iri_device
 
 GLOBAL_XVALS = np.asarray(x_values, dtype=np.float64)
 GLOBAL_YVALS = np.asarray(y_values, dtype=np.float64)
@@ -180,8 +180,8 @@ def cuda_worker_chunk(x_vals, y_vals, trans_xs, eps, base, start, end,
     q_opt = cuda.local.array(Q_CAP, dtype=float64)
     n_piv = m_plus_1
 
-    count_alg = shortest_path_dp_device(points_x, points_y, n_piv, eps,
-                                           out_alg_x, out_alg_y, MAX_OUT)
+    count_alg = modified_imai_iri_device(points_x, points_y, n_piv, eps,
+                                           out_alg_x, out_alg_y, MAX_OUT, ybuf_alg, CAP_YBUF,q_alg,Q_CAP)
 
     count_opt = approx_pc_linear_fx_device(points_x, points_y, n_piv, eps,
                                            out_opt_x, out_opt_y, MAX_OUT,

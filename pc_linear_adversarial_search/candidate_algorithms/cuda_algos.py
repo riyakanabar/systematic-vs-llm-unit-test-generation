@@ -334,5 +334,370 @@ def shortest_path_dp_device(points_x, points_y, n, eps,
 
 
 
+import math
+
+EPSX = 1e-9
+
+# ------------------------------
+# Small helpers (device)
+# ------------------------------
+@cuda.jit(device=True, inline=True)
+def round6_dev(x):
+    if x >= 0.0:
+        return math.floor(x * 1e6 + 0.5) / 1e6
+    else:
+        return math.ceil(x * 1e6 - 0.5) / 1e6
+
+@cuda.jit(device=True, inline=True)
+def calculate_angle_dev(x1, y1, x2, y2, x3, y3, direction_plus):
+    # angle at (x2,y2) from (x1,y1)->(x2,y2)->(x3,y3)
+    a1 = math.atan2(y1 - y2, x1 - x2)
+    a2 = math.atan2(y3 - y2, x3 - x2)
+    diff = a2 - a1
+    if diff < 0.0:
+        diff += 2.0 * math.pi
+    if not direction_plus:
+        diff = 2.0 * math.pi - diff
+    return round6_dev(diff)
+
+@cuda.jit(device=True, inline=True)
+def find_intersection_dev(x1, y1, x2, y2, x3, y3, x4, y4, out_xy):
+    denom = (x2 - x1) * (y4 - y3) - (x4 - x3) * (y2 - y1)
+    if abs(denom) < 1e-10:
+        out_xy[0] = round6_dev(0.5 * (x1 + x2))
+        out_xy[1] = round6_dev(0.5 * (y1 + y2))
+        return False
+    numx = (x2 * y1 - x1 * y2) * (x4 - x3) - (x4 * y3 - x3 * y4) * (x2 - x1)
+    numy = (x2 * y1 - x1 * y2) * (y4 - y3) - (x4 * y3 - x3 * y4) * (y2 - y1)
+    out_xy[0] = round6_dev(numx / denom)
+    out_xy[1] = round6_dev(numy / denom)
+    return True
+
+@cuda.jit(device=True)
+def reconstruct_piecewise_function_dev(pcx, pcy, n_pivots, ybuf, cap_ybuf, x0_out):
+    # Reconstruct y on integer grid from pivot polyline
+    if n_pivots <= 1:
+        x0_out[0] = 0.0
+        return 0
+
+    start_x = int(pcx[0])
+    out_i = 0
+
+    for i in range(n_pivots - 1):
+        x1 = pcx[i];     y1 = pcy[i]
+        x2 = pcx[i+1];   y2 = pcy[i+1]
+        if x2 == x1:
+            continue
+        slope = (y2 - y1) / (x2 - x1)
+        intercept = y1 - slope * x1
+
+        xi = int(x1)
+        x2i = int(x2)
+        while xi < x2i and out_i < cap_ybuf:
+            ybuf[out_i] = slope * xi + intercept
+            out_i += 1
+            xi += 1
+        if out_i >= cap_ybuf:
+            break
+
+    if out_i < cap_ybuf:
+        ybuf[out_i] = pcy[n_pivots - 1]
+        out_i += 1
+
+    x0_out[0] = float(start_x)
+    return out_i
+
+@cuda.jit(device=True, inline=True)
+def append_strict_dev(q_xy, q_sz_ptr, q_cap, x, y):
+    # q_xy holds pairs: [x0,y0, x1,y1, ...]
+    q_sz = q_sz_ptr[0]
+    if q_sz == 0:
+        if q_cap >= 2:
+            q_xy[0] = x; q_xy[1] = y
+            q_sz_ptr[0] = 2
+        return
+    last_x = q_xy[q_sz - 2]
+    if x <= last_x + EPSX:
+        return
+    if q_sz + 2 <= q_cap:
+        q_xy[q_sz] = x; q_xy[q_sz + 1] = y
+        q_sz_ptr[0] = q_sz + 2
+
+@cuda.jit(device=True, inline=True)
+def clip_to_band_dev(x, y, pcx, pcy, n_pivots, w, out_xy):
+    # If x matches a pivot x (within tol), clamp y into [oy-w, oy+w]
+    matched = False
+    oy = 0.0
+    for i in range(n_pivots):
+        if abs(x - pcx[i]) < 1e-9:
+            oy = pcy[i]
+            matched = True
+            break
+    if matched:
+        ymin = oy - w
+        ymax = oy + w
+        if y < ymin: y = ymin
+        if y > ymax: y = ymax
+    out_xy[0] = x
+    out_xy[1] = y
+
+@cuda.jit(device=True, inline=True)
+def is_segment_feasible_dev(p1x, p1y, p2x, p2y, pcx, pcy, n_pivots, w):
+    # Check segment lies within ±w band relative to original pivots
+    x1 = p1x; y1 = p1y
+    x2 = p2x; y2 = p2y
+    for i in range(n_pivots):
+        ox = pcx[i]; oy = pcy[i]
+        if (x1 <= ox <= x2) or (x2 <= ox <= x1):
+            if abs(x2 - x1) < 1e-12:
+                y_apx = y1
+            else:
+                t = (ox - x1) / (x2 - x1)
+                y_apx = y1 + t * (y2 - y1)
+            if not (oy - w <= y_apx <= oy + w):
+                return False
+    return True
+
+@cuda.jit(device=True)
+def force_cut_if_needed_dev(p1x, p1y, p2x, p2y, pcx, pcy, n_pivots, w, out_xy, found_ptr):
+    # If segment violates band at some pivot x, return clamped intersection there
+    found_ptr[0] = 0
+    x1 = p1x; y1 = p1y
+    x2 = p2x; y2 = p2y
+    if x1 == x2:
+        return
+    # pcx is increasing
+    for i in range(1, n_pivots-1):
+        ox = pcx[i]; oy = pcy[i]
+        if (x1 < ox < x2) or (x2 < ox < x1):
+            t = (ox - x1) / (x2 - x1)
+            y_line = y1 + (y2 - y1) * t
+            if not (oy - w <= y_line <= oy + w):
+                # clamp
+                cut_y = y_line
+                if cut_y < oy - w: cut_y = oy - w
+                if cut_y > oy + w: cut_y = oy + w
+                out_xy[0] = ox
+                out_xy[1] = cut_y
+                found_ptr[0] = 1
+                return
+
+# ---------------------------------------------
+# The modified Imai–Iri candidate (device)
+# ---------------------------------------------
+@cuda.jit(device=True)
+def modified_imai_iri_device(pcx, pcy, n_pivots, w,
+                             out_x, out_y, max_out,
+                             ybuf, cap_ybuf,
+                             q_xy, q_cap):
+    # 1) Dense reconstruction on integer-x grid
+    x0_arr = cuda.local.array(1, dtype=float64)
+    ylen = reconstruct_piecewise_function_dev(pcx, pcy, n_pivots, ybuf, cap_ybuf, x0_arr)
+    if ylen == 0:
+        return 0
+    x0 = int(x0_arr[0])
+
+    # Fast path
+    if ylen <= 2:
+        m = n_pivots
+        if m > max_out:
+            return 0
+        for i in range(m):
+            out_x[i] = pcx[i]
+            out_y[i] = pcy[i]
+        return m
+
+    # Endpoints from original pivots
+    x_start = pcx[0]; y_start = pcy[0]
+    x_end   = pcx[n_pivots - 1]; y_end = pcy[n_pivots - 1]
+
+    # 2) Try single piece inside band (two choices at each end)
+    s_cand_x0 = x_start; s_cand_y_lo = y_start - w; s_cand_y_hi = y_start + w
+    e_cand_xN = x_end;   e_cand_y_lo = y_end   - w; e_cand_y_hi = y_end   + w
+
+    if is_segment_feasible_dev(s_cand_x0, s_cand_y_lo, e_cand_xN, e_cand_y_lo, pcx, pcy, n_pivots, w):
+        if max_out < 2: return 0
+        out_x[0] = s_cand_x0; out_y[0] = s_cand_y_lo
+        out_x[1] = e_cand_xN; out_y[1] = e_cand_y_lo
+        return 2
+    if is_segment_feasible_dev(s_cand_x0, s_cand_y_lo, e_cand_xN, e_cand_y_hi, pcx, pcy, n_pivots, w):
+        if max_out < 2: return 0
+        out_x[0] = s_cand_x0; out_y[0] = s_cand_y_lo
+        out_x[1] = e_cand_xN; out_y[1] = e_cand_y_hi
+        return 2
+    if is_segment_feasible_dev(s_cand_x0, s_cand_y_hi, e_cand_xN, e_cand_y_lo, pcx, pcy, n_pivots, w):
+        if max_out < 2: return 0
+        out_x[0] = s_cand_x0; out_y[0] = s_cand_y_hi
+        out_x[1] = e_cand_xN; out_y[1] = e_cand_y_lo
+        return 2
+    if is_segment_feasible_dev(s_cand_x0, s_cand_y_hi, e_cand_xN, e_cand_y_hi, pcx, pcy, n_pivots, w):
+        if max_out < 2: return 0
+        out_x[0] = s_cand_x0; out_y[0] = s_cand_y_hi
+        out_x[1] = e_cand_xN; out_y[1] = e_cand_y_hi
+        return 2
+
+    # 3) Corridor construction (plus/minus stacks) on dense grid
+    MAX_STACK = 32
+    plus_x  = cuda.local.array(MAX_STACK, dtype=float64)
+    plus_y  = cuda.local.array(MAX_STACK, dtype=float64)
+    minus_x = cuda.local.array(MAX_STACK, dtype=float64)
+    minus_y = cuda.local.array(MAX_STACK, dtype=float64)
+    plus_sz = 0; minus_sz = 0
+
+    # initial two points k=0,1
+    xk0 = float(x0 + 0); yk0 = round6_dev(ybuf[0])
+    xk1 = float(x0 + 1); yk1 = round6_dev(ybuf[1])
+
+    p_plus_x  = xk0; p_plus_y  = yk0 + w
+    p_minus_x = xk0; p_minus_y = yk0 - w
+
+    plus_x[0] = p_plus_x;  plus_y[0]  = p_plus_y;  plus_sz  = 1
+    plus_x[1] = xk1;       plus_y[1]  = yk1 + w;   plus_sz  = 2
+
+    minus_x[0] = p_minus_x; minus_y[0] = p_minus_y; minus_sz = 1
+    minus_x[1] = xk1;       minus_y[1] = yk1 - w;   minus_sz = 2
+
+    # q_tmp uses q_xy buffer; q_sz_ptr[0] = used scalars (pairs => q_sz_ptr/2 points)
+    q_sz_ptr = cuda.local.array(1, dtype=int32)
+    q_sz_ptr[0] = 0
+
+    tmp_xy  = cuda.local.array(2, dtype=float64)
+    tmp2_xy = cuda.local.array(2, dtype=float64)
+
+    for k in range(2, ylen):
+        xk = float(x0 + k)
+        yk = round6_dev(ybuf[k])
+
+        pip_x = xk; pip_y = yk + w  # p_i_plus
+        pim_x = xk; pim_y = yk - w  # p_i_minus
+
+        # Update PLUS stack
+        while plus_sz >= 2:
+            top_x = plus_x[plus_sz - 1]; top_y = plus_y[plus_sz - 1]
+            prv_x = plus_x[plus_sz - 2]; prv_y = plus_y[plus_sz - 2]
+            ang = calculate_angle_dev(pip_x, pip_y, top_x, top_y, prv_x, prv_y, True)
+            if ang > math.pi:
+                plus_sz -= 1
+            else:
+                break
+        if plus_sz < MAX_STACK:
+            plus_x[plus_sz] = pip_x; plus_y[plus_sz] = pip_y; plus_sz += 1
+        else:
+            break  # overflow; bail out gracefully
+
+        # Update MINUS stack
+        while minus_sz >= 2:
+            top_x = minus_x[minus_sz - 1]; top_y = minus_y[minus_sz - 1]
+            prv_x = minus_x[minus_sz - 2]; prv_y = minus_y[minus_sz - 2]
+            ang = calculate_angle_dev(pim_x, pim_y, top_x, top_y, prv_x, prv_y, False)
+            if ang > math.pi:
+                minus_sz -= 1
+            else:
+                break
+        if minus_sz < MAX_STACK:
+            minus_x[minus_sz] = pim_x; minus_y[minus_sz] = pim_y; minus_sz += 1
+        else:
+            break  # overflow
+
+        if plus_sz >= 2 and minus_sz >= 2:
+            lpx = plus_x[plus_sz - 2]; lpy = plus_y[plus_sz - 2]
+            rpx = plus_x[plus_sz - 1]; rpy = plus_y[plus_sz - 1]
+            lmx = minus_x[minus_sz - 2]; lmy = minus_y[minus_sz - 2]
+            rmx = minus_x[minus_sz - 1]; rmy = minus_y[minus_sz - 1]
+
+            crossed = False
+            ang_plus = calculate_angle_dev(pip_x, pip_y, lpx, lpy, rmx, rmy, True)
+            if ang_plus < math.pi:
+                find_intersection_dev(lpx, lpy, rmx, rmy,
+                                      plus_x[0], plus_y[0], minus_x[0], minus_y[0],
+                                      tmp_xy)
+                append_strict_dev(q_xy, q_sz_ptr, q_cap, tmp_xy[0], tmp_xy[1])
+                crossed = True
+
+            if not crossed:
+                ang_minus = calculate_angle_dev(pim_x, pim_y, lmx, lmy, rpx, rpy, False)
+                if ang_minus < math.pi:
+                    find_intersection_dev(lmx, lmy, rpx, rpy,
+                                          minus_x[0], minus_y[0], plus_x[0], plus_y[0],
+                                          tmp2_xy)
+                    append_strict_dev(q_xy, q_sz_ptr, q_cap, tmp2_xy[0], tmp2_xy[1])
+
+    # Tail: midpoint of last corridor ends
+    if plus_sz >= 2 and minus_sz >= 2:
+        lpx = plus_x[plus_sz - 2]; lpy = plus_y[plus_sz - 2]
+        rpx = plus_x[plus_sz - 1]; rpy = plus_y[plus_sz - 1]
+        lmx = minus_x[minus_sz - 2]; lmy = minus_y[minus_sz - 2]
+        rmx = minus_x[minus_sz - 1]; rmy = minus_y[minus_sz - 1]
+
+        a = cuda.local.array(2, dtype=float64)
+        b = cuda.local.array(2, dtype=float64)
+        find_intersection_dev(lpx, lpy, rmx, rmy, plus_x[0], plus_y[0], minus_x[0], minus_y[0], a)
+        find_intersection_dev(lmx, lmy, rpx, rpy, minus_x[0], minus_y[0], plus_x[0], plus_y[0], b)
+        midx = 0.5 * (a[0] + b[0]); midy = 0.5 * (a[1] + b[1])
+        append_strict_dev(q_xy, q_sz_ptr, q_cap, midx, midy)
+
+    # If no corridor points, fall back to endpoints
+    if q_sz_ptr[0] < 2:
+        if max_out < 2: return 0
+        out_x[0] = x_start; out_y[0] = y_start
+        out_x[1] = x_end;   out_y[1] = y_end
+        return 2
+
+    # 4) Choose feasible start on band and enforce feasibility with cuts
+    # p = midpoint candidate (last q point)
+    last_x = q_xy[q_sz_ptr[0] - 2]; last_y = q_xy[q_sz_ptr[0] - 1]
+    p_xy = cuda.local.array(2, dtype=float64)
+    clip_to_band_dev(last_x, last_y, pcx, pcy, n_pivots, w, p_xy)
+    px = p_xy[0]; py = p_xy[1]
+
+    start_lo_x = x_start; start_lo_y = y_start - w
+    start_hi_x = x_start; start_hi_y = y_start + w
+
+    start_x = start_lo_x; start_y = start_lo_y
+    if not is_segment_feasible_dev(start_x, start_y, px, py, pcx, pcy, n_pivots, w):
+        if is_segment_feasible_dev(start_hi_x, start_hi_y, px, py, pcx, pcy, n_pivots, w):
+            start_x = start_hi_x; start_y = start_hi_y
+
+    # Build final q -> out
+    # We'll reuse q_xy as a builder; reset and push
+    q_sz_ptr[0] = 0
+    append_strict_dev(q_xy, q_sz_ptr, q_cap, start_x, start_y)
+
+    # maybe cut before p
+    if not is_segment_feasible_dev(start_x, start_y, px, py, pcx, pcy, n_pivots, w):
+        cut_xy = cuda.local.array(2, dtype=float64)
+        found = cuda.local.array(1, dtype=int32); found[0] = 0
+        force_cut_if_needed_dev(start_x, start_y, px, py, pcx, pcy, n_pivots, w, cut_xy, found)
+        if found[0] == 1:
+            tmpc = cuda.local.array(2, dtype=float64)
+            clip_to_band_dev(cut_xy[0], cut_xy[1], pcx, pcy, n_pivots, w, tmpc)
+            append_strict_dev(q_xy, q_sz_ptr, q_cap, tmpc[0], tmpc[1])
+    append_strict_dev(q_xy, q_sz_ptr, q_cap, px, py)
+
+    # end point (clipped)
+    end_xy = cuda.local.array(2, dtype=float64)
+    clip_to_band_dev(x_end, y_end, pcx, pcy, n_pivots, w, end_xy)
+
+    last_qx = q_xy[q_sz_ptr[0] - 2]; last_qy = q_xy[q_sz_ptr[0] - 1]
+    if not is_segment_feasible_dev(last_qx, last_qy, end_xy[0], end_xy[1], pcx, pcy, n_pivots, w):
+        cut2 = cuda.local.array(2, dtype=float64)
+        found2 = cuda.local.array(1, dtype=int32); found2[0] = 0
+        force_cut_if_needed_dev(last_qx, last_qy, end_xy[0], end_xy[1], pcx, pcy, n_pivots, w, cut2, found2)
+        if found2[0] == 1:
+            tmpc2 = cuda.local.array(2, dtype=float64)
+            clip_to_band_dev(cut2[0], cut2[1], pcx, pcy, n_pivots, w, tmpc2)
+            append_strict_dev(q_xy, q_sz_ptr, q_cap, tmpc2[0], tmpc2[1])
+    append_strict_dev(q_xy, q_sz_ptr, q_cap, end_xy[0], end_xy[1])
+
+    # Emit to out_x/out_y
+    pts = q_sz_ptr[0] // 2
+    use = pts if pts <= max_out else max_out
+    for i in range(use):
+        out_x[i] = q_xy[2 * i]
+        out_y[i] = q_xy[2 * i + 1]
+    return use
+
+
+
 
 
