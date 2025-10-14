@@ -22,7 +22,8 @@ from candidate_algorithms.numba_algorithms import greedy_approximation_numba
 from numba_cuda import test_algorithm
 
 if __name__ == "__main__":
-    test_algorithm_parallel(candidate1)
+    # test_algorithm_parallel(candidate1) #Run this to get the first failure count
+    test_algorithm() #run the cuda version
     # Given
     # cases_per_second = 250000 #41_542_118
     # total_cases = 34_867_814_400
