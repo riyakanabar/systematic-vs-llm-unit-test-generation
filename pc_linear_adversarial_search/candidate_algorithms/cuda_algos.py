@@ -818,6 +818,7 @@ def _furthest_reach_dev(xs, ys, n, start, eps,
 
 
 # ---------- main: beam-search approximation ----------
+#beam_width = 10 used during calculations
 @cuda.jit(device=True)
 def piecewise_linear_apx_beam_search_device(xs, ys, n, eps,
                                             out_x, out_y, max_out,
