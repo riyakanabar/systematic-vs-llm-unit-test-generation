@@ -5,14 +5,17 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from .candidate_algos_1 import (
     greedy_approximation as candidate1,
     improved_greedy_with_lookahead as candidate2,
-    branch_and_bound as candidate3,
-    douglas_peucker_approximation as candidate4,
+    douglas_peucker_approximation as candidate3,
 )
 from .candidate_algos_2 import (
-    shortest_path_dp as candidate5,
+    shortest_path_dp as candidate4,
+piecewise_linear_apx_furthest_scan as candidate5,
+piecewise_linear_apx_beam_search as candidate6,
+piecewise_linear_apx_visvalingam as candidate7,
+piecewise_linear_apx_merge_cost as candidate8,
 )
-from .modified_imai_iri import modified_imai_iri as candidate6
+from .modified_imai_iri import modified_imai_iri as candidate9
 
 
-candidate_algorithms = [candidate1, candidate2, candidate3, candidate4, candidate5,
-                        candidate6]
+candidate_algorithms = [candidate1, candidate2, candidate3, candidate4, candidate5, candidate6,
+                         candidate7, candidate8, candidate9]

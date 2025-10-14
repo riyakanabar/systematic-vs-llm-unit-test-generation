@@ -1,9 +1,9 @@
 from typing import List, Tuple
 import numpy as np
 from scipy.optimize import linprog
-
-
+import heapq
 Point = Tuple[float, float]
+
 def _y_on_line(x, x1, y1, x2, y2):
     t = (x - x1) / (x2 - x1)
     return y1 + t * (y2 - y1)
@@ -267,164 +267,234 @@ def fixed_knot_LP(pc_linear_fx, epsilon):
 
     return optimal_pc_linear_fx, optimal_num_pieces, given_num_pieces
 
+def _update_slope_interval(
+    x0: float, y0: float, xi: float, yi: float, eps: float,
+    smin: float, smax: float
+) -> Tuple[float, float, bool]:
+    """
+    Intersect the current feasible slope interval [smin, smax] with
+    the constraint from point (xi, yi): |(y0 + s*(xi-x0)) - yi| <= eps.
+    That inequality becomes:
+        (yi - y0 - eps)/(xi - x0) <= s <= (yi - y0 + eps)/(xi - x0)
+    (Assumes strictly increasing x.)
+    Returns updated [smin, smax] and a boolean 'ok' indicating non-empty.
+    """
+    dx = xi - x0
+    # dx should be > 0 because x are strictly increasing for a function
+    lo = (yi - y0 - eps) / dx
+    hi = (yi - y0 + eps) / dx
+    if lo > smin: smin = lo
+    if hi < smax: smax = hi
+    return smin, smax, (smin <= smax)
 
-def compute_min_E_and_fit(i, j, points):
-    """Compute minimax (Chebyshev) fit and minimum E for points[i:j+1]."""
-    if j - i < 1:
-        return 0.0, None, None
-    x = np.array([p[0] for p in points[i:j+1]])
-    y = np.array([p[1] for p in points[i:j+1]])
-    n = j - i + 1
-    A_ub = np.zeros((2*n, 3))
-    b_ub = np.zeros(2*n)
-    for k in range(n):
-        # a * x_k + b - E <= y_k
-        A_ub[2*k, 0] = x[k]
-        A_ub[2*k, 1] = 1.0
-        A_ub[2*k, 2] = -1.0
-        b_ub[2*k] = y[k]
-        # -a * x_k - b - E <= -y_k
-        A_ub[2*k+1, 0] = -x[k]
-        A_ub[2*k+1, 1] = -1.0
-        A_ub[2*k+1, 2] = -1.0
-        b_ub[2*k+1] = -y[k]
-    c = np.array([0.0, 0.0, 1.0])
-    res = linprog(c, A_ub=A_ub, b_ub=b_ub, bounds=(None, None), method='highs')
-    if res.success:
-        return res.fun, res.x[0], res.x[1]
-    else:
-        return float('inf'), None, None
+def piecewise_linear_apx_furthest_scan(
+    pc_linear_fx: List[Point], epsilon: float
+) -> Tuple[List[Point], int, int]:
+    """
+    Exact minimal-piece segmentation under L∞ tolerance with endpoints
+    restricted to the given points.
 
-def reconstruct_optimal_points(points, kept, epsilon):
-    """Reconstruct the optimal piecewise linear function from kept indices."""
-    x_list = [p[0] for p in points]
-    y_list = [p[1] for p in points]
-    num_kept = len(kept)
-    if num_kept < 2:
-        return [(x_list[kept[0]], y_list[kept[0]])] if num_kept == 1 else [], 0
-    num_pieces = num_kept - 1
-    A_ub_list = []
-    b_ub_list = []
-    for r in range(num_pieces):
-        a = kept[r]
-        b = kept[r + 1]
-        dx = x_list[b] - x_list[a]
-        if dx == 0:
-            continue
-        for kk in range(a, b + 1):
-            t = 0.0 if kk == a else (x_list[kk] - x_list[a]) / dx
-            # upper: (1-t)*y_a + t*y_b <= y_kk + epsilon
-            row = np.zeros(num_kept)
-            row[r] = 1 - t
-            row[r + 1] = t
-            A_ub_list.append(row)
-            b_ub_list.append(y_list[kk] + epsilon)
-            # lower: -(1-t)*y_a - t*y_b <= -(y_kk - epsilon)
-            row = np.zeros(num_kept)
-            row[r] = -(1 - t)
-            row[r + 1] = -t
-            A_ub_list.append(row)
-            b_ub_list.append(-(y_list[kk] - epsilon))
-    if not A_ub_list:
-        return [(x_list[idx], y_list[idx]) for idx in kept]
-    A_ub = np.vstack(A_ub_list)
-    b_ub = np.array(b_ub_list)
-    c = np.zeros(num_kept)
-    res = linprog(c, A_ub=A_ub, b_ub=b_ub, bounds=(None, None), method='highs')
-    if res.success:
-        y_primes = res.x
-        return [(x_list[idx], y_primes[p]) for p, idx in enumerate(kept)]
-    else:
-        return points
+    Returns: (optimal_pc_linear_fx, optimal_num_pieces, given_num_pieces)
+    """
+    if len(pc_linear_fx) <= 2:
+        given_num_pieces = max(0, len(pc_linear_fx) - 1)
+        return pc_linear_fx[:], given_num_pieces, given_num_pieces
 
+    xs = [p[0] for p in pc_linear_fx]
+    ys = [p[1] for p in pc_linear_fx]
+    n = len(xs)
 
-def greedy_farthest(pc_linear_fx, epsilon):
-    """Greedy Farthest with Minimax Check"""
-    points = pc_linear_fx
-    m = len(points)
-    if m < 2:
-        return points, 0, 0
-    given_num_pieces = m - 1
-    kept = [0]
-    current = 0
-    while current < m - 1:
-        found = False
-        for j in range(m - 1, current, -1):
-            min_E, _, _ = compute_min_E_and_fit(current, j, points)
-            if min_E <= epsilon:
-                kept.append(j)
-                current = j
-                found = True
+    # Guard: x must be strictly increasing for a valid function
+    for k in range(1, n):
+        if not (xs[k] > xs[k-1]):
+            raise ValueError("x-values must be strictly increasing.")
+
+    out_indices = [0]  # indices of chosen breakpoints; start with first
+    i = 0
+    while i < n - 1:
+        # Start a new segment at i; initialize feasible slope interval unbounded
+        smin, smax = float("-inf"), float("inf")
+        j = i + 1
+        last_ok = i + 1
+
+        # Grow j while feasible
+        while j < n:
+            smin, smax, ok = _update_slope_interval(xs[i], ys[i], xs[j], ys[j], epsilon, smin, smax)
+            if not ok:
                 break
-        if not found:
-            kept.append(m - 1)
+            last_ok = j
+            j += 1
+
+        # Commit the farthest feasible endpoint
+        out_indices.append(last_ok)
+        i = last_ok
+
+    # Build output points (use the original sample points as endpoints)
+    optimal_pc_linear_fx = [pc_linear_fx[idx] for idx in out_indices]
+    optimal_num_pieces = len(optimal_pc_linear_fx) - 1
+    given_num_pieces = len(pc_linear_fx) - 1
+    return optimal_pc_linear_fx, optimal_num_pieces, given_num_pieces
+
+
+
+def _furthest_reach(xs, ys, start, eps):
+    """Return all feasible end indices > start for one segment."""
+    smin, smax = float("-inf"), float("inf")
+    x0, y0 = xs[start], ys[start]
+    n = len(xs)
+    ends = []
+    for j in range(start + 1, n):
+        smin, smax, ok = _update_slope_interval(x0, y0, xs[j], ys[j], eps, smin, smax)
+        if not ok:
             break
-    optimal_pc_linear_fx = reconstruct_optimal_points(points, kept, epsilon)
-    optimal_num_pieces = len(optimal_pc_linear_fx) - 1 if len(optimal_pc_linear_fx) > 1 else 0
-    if len(optimal_pc_linear_fx) != len(kept):
-        optimal_pc_linear_fx = points
-        optimal_num_pieces = given_num_pieces
-    return optimal_pc_linear_fx, optimal_num_pieces, given_num_pieces
+        ends.append(j)
+    return ends
+
+def piecewise_linear_apx_beam_search(
+    pc_linear_fx: List[Point],
+    epsilon: float,
+    beam_width: int = 10
+) -> Tuple[List[Point], int, int]:
+    """
+    Beam search piecewise linear approximation under L∞ norm.
+    Keeps top 'beam_width' candidate segmentations per frontier.
+    """
+    n = len(pc_linear_fx)
+    if n <= 2:
+        given = max(0, n - 1)
+        return pc_linear_fx[:], given, given
+
+    xs = [p[0] for p in pc_linear_fx]
+    ys = [p[1] for p in pc_linear_fx]
+
+    # Each state = (cost, index, path)
+    # cost = segments used so far + heuristic estimate for remaining
+    start_state = (0, 0, [0])
+    beam = [start_state]
+
+    while True:
+        new_beam = []
+        for cost, i, path in beam:
+            if i == n - 1:
+                # Reached end
+                return [pc_linear_fx[idx] for idx in path], len(path) - 1, n - 1
+
+            feasible_ends = _furthest_reach(xs, ys, i, epsilon)
+            for j in feasible_ends:
+                new_cost = cost + 1
+                # Heuristic: optimistic segments remaining (approx n-j over avg span)
+                heuristic = (n - j - 1) / (len(pc_linear_fx) / 5)
+                total_cost = new_cost + heuristic
+                new_beam.append((total_cost, j, path + [j]))
+
+        if not new_beam:
+            break
+
+        # Keep top-B
+        beam = heapq.nsmallest(beam_width, new_beam, key=lambda s: s[0])
+
+    # If somehow we exit without exact end
+    best = min(beam, key=lambda s: abs(s[1] - (n - 1)))
+    best_path = best[2] + ([n - 1] if best[2][-1] != n - 1 else [])
+    return [pc_linear_fx[idx] for idx in best_path], len(best_path) - 1, n - 1
 
 
-def recursive_keep_minimax(i, j, points, epsilon):
-    """Recursive function for top-down splitting with minimax check."""
-    if i >= j:
-        return []
-    if i + 1 == j:
-        return [i, j]
-    min_E, a, b = compute_min_E_and_fit(i, j, points)
-    if min_E <= epsilon:
-        return [i, j]
-    x = np.array([p[0] for p in points[i:j+1]])
-    y = np.array([p[1] for p in points[i:j+1]])
-    pred = a * x + b
-    devs = np.abs(y - pred)
-    k = i + 1 + np.argmax(devs[1:-1])
-    left = recursive_keep_minimax(i, k, points, epsilon)
-    right = recursive_keep_minimax(k, j, points, epsilon)
-    return left + right[1:]
 
-def top_down_split(pc_linear_fx, epsilon):
-    """Top-Down Split with Minimax Check"""
-    points = pc_linear_fx
-    m = len(points)
-    if m < 2:
-        return points, 0, 0
-    given_num_pieces = m - 1
-    kept = recursive_keep_minimax(0, m - 1, points, epsilon)
-    kept = sorted(set(kept))
-    optimal_pc_linear_fx = reconstruct_optimal_points(points, kept, epsilon)
-    optimal_num_pieces = len(optimal_pc_linear_fx) - 1 if len(optimal_pc_linear_fx) > 1 else 0
-    if len(optimal_pc_linear_fx) != len(kept):
-        optimal_pc_linear_fx = points
-        optimal_num_pieces = given_num_pieces
-    return optimal_pc_linear_fx, optimal_num_pieces, given_num_pieces
 
-def botton_up_merge(pc_linear_fx, epsilon):
-    """Bottom-Up Merge with Minimax Check"""
-    points = pc_linear_fx
-    m = len(points)
-    if m < 2:
-        return points, 0, 0
-    given_num_pieces = m - 1
-    kept = list(range(m))
-    changed = True
-    while changed:
-        changed = False
-        r = 0
-        while r < len(kept) - 2:
-            start = kept[r]
-            end = kept[r + 2]
-            min_E, _, _ = compute_min_E_and_fit(start, end, points)
-            if min_E <= epsilon:
-                del kept[r + 1]
-                changed = True
-            else:
-                r += 1
-    optimal_pc_linear_fx = reconstruct_optimal_points(points, kept, epsilon)
-    optimal_num_pieces = len(optimal_pc_linear_fx) - 1 if len(optimal_pc_linear_fx) > 1 else 0
-    if len(optimal_pc_linear_fx) != len(kept):
-        optimal_pc_linear_fx = points
-        optimal_num_pieces = given_num_pieces
-    return optimal_pc_linear_fx, optimal_num_pieces, given_num_pieces
+
+def _triangle_area(p1, p2, p3):
+    return abs((p1[0]*(p2[1]-p3[1]) +
+                p2[0]*(p3[1]-p1[1]) +
+                p3[0]*(p1[1]-p2[1])) / 2.0)
+
+def piecewise_linear_apx_visvalingam(
+    pc_linear_fx: List[Tuple[float, float]],
+    epsilon: float
+) -> Tuple[List[Tuple[float, float]], int, int]:
+    """
+    Visvalingam–Whyatt simplification. Remove smallest-area points
+    until all deviations are within ±epsilon.
+    """
+    if len(pc_linear_fx) <= 2:
+        given = len(pc_linear_fx) - 1
+        return pc_linear_fx[:], given, given
+
+    n = len(pc_linear_fx)
+    areas = [float('inf')] * n
+    heap = []
+    for i in range(1, n - 1):
+        a = _triangle_area(pc_linear_fx[i - 1], pc_linear_fx[i], pc_linear_fx[i + 1])
+        areas[i] = a
+        heapq.heappush(heap, (a, i))
+
+    removed = [False] * n
+    while heap:
+        a, i = heapq.heappop(heap)
+        if removed[i]:
+            continue
+        # Check if within tolerance (approx via area-to-height ratio)
+        base = pc_linear_fx[i + 1][0] - pc_linear_fx[i - 1][0]
+        height = (2 * a / base) if base != 0 else float('inf')
+        if height <= epsilon:
+            removed[i] = True
+            # Update neighbor triangles
+            for j in [i - 1, i + 1]:
+                if 0 < j < n - 1 and not removed[j]:
+                    new_a = _triangle_area(pc_linear_fx[j - 1], pc_linear_fx[j], pc_linear_fx[j + 1])
+                    areas[j] = new_a
+                    heapq.heappush(heap, (new_a, j))
+        else:
+            break
+
+    simplified = [p for i, p in enumerate(pc_linear_fx) if not removed[i]]
+    opt = len(simplified) - 1
+    given = len(pc_linear_fx) - 1
+    return simplified, opt, given
+def piecewise_linear_apx_merge_cost(
+    pc_linear_fx: List[Tuple[float, float]],
+    epsilon: float
+) -> Tuple[List[Tuple[float, float]], int, int]:
+    """
+    Bottom-up merge simplification: iteratively merge neighboring segments
+    whose merge causes minimal deviation (under L∞ <= epsilon).
+    """
+    if len(pc_linear_fx) <= 2:
+        given = len(pc_linear_fx) - 1
+        return pc_linear_fx[:], given, given
+
+    points = pc_linear_fx[:]
+    n = len(points)
+
+    def deviation(i):
+        """Compute max |error| if we merge (i, i+1, i+2)."""
+        if i < 0 or i + 2 >= len(points):
+            return float('inf')
+        (x1, y1), (x3, y3) = points[i], points[i + 2]
+        max_dev = 0.0
+        for k in range(i + 1, i + 2):
+            xk, yk = points[k]
+            # y on line
+            yline = y1 + (y3 - y1) * (xk - x1) / (x3 - x1)
+            max_dev = max(max_dev, abs(yk - yline))
+        return max_dev
+
+    while True:
+        # Find smallest deviation merge
+        best_i, best_dev = -1, float('inf')
+        for i in range(len(points) - 2):
+            d = deviation(i)
+            if d < best_dev:
+                best_dev, best_i = d, i
+
+        if best_dev > epsilon or best_i == -1:
+            break
+
+        # Merge by removing the middle point
+        del points[best_i + 1]
+
+    opt = len(points) - 1
+    given = len(pc_linear_fx) - 1
+    return points, opt, given
+
+
+

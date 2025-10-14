@@ -64,41 +64,6 @@ def improved_greedy_with_lookahead(points: List[Point], epsilon: float, lookahea
 
     optimal_num_pieces = max(0, len(result) - 1)
     return result, optimal_num_pieces, given_num_pieces
-def branch_and_bound(points: List[Point], epsilon: float) -> Tuple[List[Point], int, int]:
-    """Branch and Bound - guaranteed optimal."""
-    n = len(points)
-    given_num_pieces = max(0, n - 1)
-    if n <= 2:
-        return points, max(0, n - 1), given_num_pieces
-
-    # Precompute validity
-    valid_segments = {(i, j): is_valid_segment(points, i, j, epsilon)
-                      for i in range(n) for j in range(i+1, n)}
-
-    best_solution, best_segments = None, float('inf')
-
-    def dfs(path: List[int], pos: int):
-        nonlocal best_solution, best_segments
-        if len(path) >= best_segments:
-            return
-        if pos == n - 1:
-            best_solution, best_segments = path.copy(), len(path)
-            return
-        for nxt in range(pos+1, n):
-            if valid_segments[(pos, nxt)]:
-                path.append(nxt)
-                dfs(path, nxt)
-                path.pop()
-
-    dfs([0], 0)
-
-    if best_solution:
-        result = [points[i] for i in best_solution]
-    else:
-        result = points
-
-    optimal_num_pieces = max(0, len(result) - 1)
-    return result, optimal_num_pieces, given_num_pieces
 
 def greedy_approximation(points: List[Point], epsilon: float) -> Tuple[List[Point], int, int]:
     """

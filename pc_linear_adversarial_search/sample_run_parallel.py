@@ -6,14 +6,11 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from candidate_algorithms.candidate_algos_1 import (
     greedy_approximation as candidate1,
     improved_greedy_with_lookahead as candidate2,
-    branch_and_bound as candidate3,
     douglas_peucker_approximation as candidate4,
 )
 from candidate_algorithms.candidate_algos_2 import (
     shortest_path_dp as candidate5,
-    greedy_farthest as candidate6,
-    top_down_split as candidate7,
-    botton_up_merge as candidate8,
+piecewise_linear_apx_furthest_scan, piecewise_linear_apx_merge_cost, piecewise_linear_apx_visvalingam, piecewise_linear_apx_beam_search
 )
 from candidate_algorithms.modified_imai_iri import modified_imai_iri as candidate9
 from cpu_parallel import test_algorithm_parallel
@@ -22,7 +19,7 @@ from candidate_algorithms.numba_algorithms import greedy_approximation_numba
 from numba_cuda import test_algorithm
 
 if __name__ == "__main__":
-    test_algorithm()
+    test_algorithm_parallel(piecewise_linear_apx_furthest_scan)
     # Given
     # cases_per_second = 250000 #41_542_118
     # total_cases = 34_867_814_400
