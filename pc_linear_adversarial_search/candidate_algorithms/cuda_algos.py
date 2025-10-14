@@ -947,3 +947,94 @@ def piecewise_linear_apx_beam_search_device(xs, ys, n, eps,
         plen += 1
     return plen
 
+# ---------- helper: triangle area ----------
+@cuda.jit(device=True, inline=True)
+def _triangle_area_dev(x1, y1, x2, y2, x3, y3):
+    return abs((x1 * (y2 - y3) +
+                x2 * (y3 - y1) +
+                x3 * (y1 - y2)) / 2.0)
+
+
+# ---------- main: Visvalingam simplification ----------
+@cuda.jit(device=True)
+def piecewise_linear_apx_visvalingam_device(points_x, points_y, n, eps,
+                                            out_x, out_y, max_out):
+    """
+    CUDA-device implementation of Visvalingam–Whyatt simplification
+    under L∞ tolerance. Removes smallest-area points until all
+    triangle heights ≤ epsilon.
+    Returns number of pivot points written to out_x/out_y.
+    """
+
+    # trivial case
+    if n <= 2:
+        count = n if n <= max_out else max_out
+        for i in range(count):
+            out_x[i] = points_x[i]
+            out_y[i] = points_y[i]
+        return count
+
+    MAX_N = 128  # maximum allowed points (adjust to your data)
+    if n > MAX_N:
+        n = MAX_N
+
+    # static buffers
+    areas = cuda.local.array(MAX_N, dtype=float64)
+    removed = cuda.local.array(MAX_N, dtype=int32)
+
+    # initialize
+    for i in range(n):
+        removed[i] = 0
+        areas[i] = math.inf
+
+    # compute initial triangle areas
+    for i in range(1, n - 1):
+        a = _triangle_area_dev(points_x[i - 1], points_y[i - 1],
+                               points_x[i],     points_y[i],
+                               points_x[i + 1], points_y[i + 1])
+        areas[i] = a
+
+    # iterative removal loop
+    while True:
+        # find smallest non-removed area
+        min_a = math.inf
+        min_idx = -1
+        for i in range(1, n - 1):
+            if removed[i] == 0 and areas[i] < min_a:
+                min_a = areas[i]
+                min_idx = i
+
+        if min_idx == -1:
+            break
+
+        # compute height approximation
+        base = points_x[min_idx + 1] - points_x[min_idx - 1]
+        if base == 0.0:
+            height = math.inf
+        else:
+            height = (2.0 * min_a / base)
+
+        # stop if beyond epsilon
+        if height > eps:
+            break
+
+        # remove that point
+        removed[min_idx] = 1
+
+        # update neighboring triangle areas
+        for j in range(min_idx - 1, min_idx + 2):
+            if 0 < j < n - 1 and removed[j] == 0:
+                new_a = _triangle_area_dev(points_x[j - 1], points_y[j - 1],
+                                           points_x[j],     points_y[j],
+                                           points_x[j + 1], points_y[j + 1])
+                areas[j] = new_a
+
+    # collect simplified points
+    count = 0
+    for i in range(n):
+        if removed[i] == 0 and count < max_out:
+            out_x[count] = points_x[i]
+            out_y[count] = points_y[i]
+            count += 1
+
+    return count
