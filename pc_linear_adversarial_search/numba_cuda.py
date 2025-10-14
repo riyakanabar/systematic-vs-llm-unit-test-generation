@@ -14,6 +14,7 @@ from candidate_algorithms.cuda_algos import (greedy_approximation_device,
                                              piecewise_linear_apx_furthest_scan_device,
                                              piecewise_linear_apx_beam_search_device,
                                              piecewise_linear_apx_visvalingam_device,
+                                             piecewise_linear_apx_bottom_up_merge_device,
                                              modified_imai_iri_device)
 
 GLOBAL_XVALS = np.asarray(x_values, dtype=np.float64)
@@ -186,7 +187,7 @@ def cuda_worker_chunk(x_vals, y_vals, trans_xs, eps, base, start, end,
     q_opt = cuda.local.array(Q_CAP, dtype=float64)
     n_piv = m_plus_1
 
-    count_alg = piecewise_linear_apx_visvalingam_device(points_x, points_y, n_piv, eps,
+    count_alg = piecewise_linear_apx_bottom_up_merge_device(points_x, points_y, n_piv, eps,
                                            out_alg_x, out_alg_y, MAX_OUT)
 
     count_opt = approx_pc_linear_fx_device(points_x, points_y, n_piv, eps,

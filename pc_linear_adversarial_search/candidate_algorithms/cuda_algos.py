@@ -1039,3 +1039,90 @@ def piecewise_linear_apx_visvalingam_device(points_x, points_y, n, eps,
             count += 1
 
     return count
+
+
+
+
+@cuda.jit(device=True, inline=True)
+def _compute_deviation_dev(px, py, n, i):
+    """
+    Compute max deviation for merging points (i, i+1, i+2).
+    Returns ∞ if merge is invalid.
+    """
+    if i < 0 or i + 2 >= n:
+        return math.inf
+
+    x1 = px[i];   y1 = py[i]
+    x3 = px[i+2]; y3 = py[i+2]
+    x2 = px[i+1]; y2 = py[i+1]
+
+    dx = x3 - x1
+    if abs(dx) < 1e-12:
+        return math.inf
+
+    yline = y1 + (y3 - y1) * (x2 - x1) / dx
+    return abs(y2 - yline)
+
+
+@cuda.jit(device=True)
+def piecewise_linear_apx_bottom_up_merge_device(points_x, points_y, n, eps,
+                                                out_x, out_y, max_out):
+    """
+    CUDA-device version of bottom-up merge simplification.
+    Iteratively merges neighboring segments whose merge deviation <= eps.
+    Returns number of output points.
+    """
+
+    # trivial case
+    if n <= 2:
+        count = n if n <= max_out else max_out
+        for i in range(count):
+            out_x[i] = points_x[i]
+            out_y[i] = points_y[i]
+        return count
+
+    MAX_N = 128  # maximum allowed points (tunable)
+    if n > MAX_N:
+        n = MAX_N
+
+    # local working buffers
+    px = cuda.local.array(MAX_N, dtype=float64)
+    py = cuda.local.array(MAX_N, dtype=float64)
+
+    # copy input
+    for i in range(n):
+        px[i] = points_x[i]
+        py[i] = points_y[i]
+
+    curr_n = n
+
+    # iterative merge loop
+    while True:
+        best_i = -1
+        best_dev = math.inf
+
+        # find smallest deviation
+        for i in range(curr_n - 2):
+            d = _compute_deviation_dev(px, py, curr_n, i)
+            if d < best_dev:
+                best_dev = d
+                best_i = i
+
+        # stop if nothing can merge
+        if best_i == -1 or best_dev > eps:
+            break
+
+        # merge by removing middle point (best_i + 1)
+        # shift elements left
+        for j in range(best_i + 1, curr_n - 1):
+            px[j] = px[j + 1]
+            py[j] = py[j + 1]
+        curr_n -= 1
+
+    # copy to output
+    count = curr_n if curr_n <= max_out else max_out
+    for i in range(count):
+        out_x[i] = px[i]
+        out_y[i] = py[i]
+
+    return count
