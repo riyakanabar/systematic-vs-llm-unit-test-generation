@@ -124,7 +124,6 @@ def test_algorithm_parallel(algorithm):
                         pool.terminate()
                         elapsed_time = time.time() - start_time
                         print(f"\nFound counterexample after {count} cases! (Time: {elapsed_time:.2f}s)")
-                        print(f"It failed, now check for..{is_within_epsilon(points, apx_fx, epsilon)}")
                         print(f"Failure type: {test_name}")
                         print(f"Testcase: {points}")
                         print(f"Epsilon: {epsilon}")

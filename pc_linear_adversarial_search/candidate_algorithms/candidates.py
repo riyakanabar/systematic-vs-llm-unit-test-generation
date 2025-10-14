@@ -12,7 +12,7 @@ from .candidate_algos_2 import (
 piecewise_linear_apx_furthest_scan as candidate5,
 piecewise_linear_apx_beam_search as candidate6,
 piecewise_linear_apx_visvalingam as candidate7,
-piecewise_linear_apx_merge_cost as candidate8,
+piecewise_linear_apx_bottom_up_merge as candidate8,
 )
 from .modified_imai_iri import modified_imai_iri as candidate9
 

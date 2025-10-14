@@ -450,7 +450,7 @@ def piecewise_linear_apx_visvalingam(
     opt = len(simplified) - 1
     given = len(pc_linear_fx) - 1
     return simplified, opt, given
-def piecewise_linear_apx_merge_cost(
+def piecewise_linear_apx_bottom_up_merge(
     pc_linear_fx: List[Tuple[float, float]],
     epsilon: float
 ) -> Tuple[List[Tuple[float, float]], int, int]:
