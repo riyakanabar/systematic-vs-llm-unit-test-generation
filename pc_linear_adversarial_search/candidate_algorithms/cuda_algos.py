@@ -699,5 +699,101 @@ def modified_imai_iri_device(pcx, pcy, n_pivots, w,
 
 
 
+@cuda.jit(device=True, inline=True)
+def _update_slope_interval_dev(x0, y0, xi, yi, eps, smin, smax):
+    """
+    Intersect current slope interval [smin, smax] with constraint from (xi, yi):
+       |(y0 + s*(xi-x0)) - yi| <= eps
+    => (yi - y0 - eps)/(xi - x0) <= s <= (yi - y0 + eps)/(xi - x0)
+    Returns (new_smin, new_smax, ok_flag)
+    """
+    dx = xi - x0
+    # For strictly increasing x, dx should be > 0
+    if dx == 0.0:
+        return smin, smax, 0  # infeasible
+    lo = (yi - y0 - eps) / dx
+    hi = (yi - y0 + eps) / dx
+    if lo > smin:
+        smin = lo
+    if hi < smax:
+        smax = hi
+    return smin, smax, 1 if (smin <= smax) else 0
+
+
+
+@cuda.jit(device=True)
+def piecewise_linear_apx_furthest_scan_device(points_x, points_y, n, eps,
+                                              out_x, out_y, max_out):
+    """
+    Exact minimal-piece segmentation under L∞ tolerance with endpoints
+    restricted to the existing sample points.
+
+    Returns: count of output pivots written to out_x/out_y.
+    """
+    # Trivial cases
+    if n <= 2:
+        count = n if n <= max_out else max_out
+        for k in range(count):
+            out_x[k] = points_x[k]
+            out_y[k] = points_y[k]
+        return count
+
+    # Guard: x must be strictly increasing. If not, just copy input (safe fallback).
+    strictly_inc = True
+    for k in range(1, n):
+        if not (points_x[k] > points_x[k - 1]):
+            strictly_inc = False
+            break
+    if not strictly_inc:
+        count = n if n <= max_out else max_out
+        for k in range(count):
+            out_x[k] = points_x[k]
+            out_y[k] = points_y[k]
+        return count
+
+    # We emit the chosen breakpoints directly into out_* as we go.
+    out_count = 0
+
+    # Start with the first point
+    if out_count < max_out:
+        out_x[out_count] = points_x[0]
+        out_y[out_count] = points_y[0]
+        out_count += 1
+
+    i = 0
+    while i < n - 1:
+        # New segment starting at i
+        smin = -math.inf
+        smax =  math.inf
+        j = i + 1
+        last_ok = i + 1
+
+        # extend j while feasible
+        while j < n:
+            smin, smax, ok = _update_slope_interval_dev(points_x[i], points_y[i],
+                                                        points_x[j], points_y[j],
+                                                        eps, smin, smax)
+            if ok == 0:
+                break
+            last_ok = j
+            j += 1
+
+        # Commit the farthest feasible endpoint: index last_ok
+        if out_count < max_out:
+            out_x[out_count] = points_x[last_ok]
+            out_y[out_count] = points_y[last_ok]
+            out_count += 1
+
+        i = last_ok  # continue from there
+
+        # Safety: if out buffer is full, we must stop
+        if out_count >= max_out:
+            break
+
+    return out_count
+
+
+
+
 
 
