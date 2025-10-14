@@ -12,6 +12,7 @@ from candidate_algorithms.cuda_algos import (greedy_approximation_device,
                                              improved_greedy_with_lookahead_dev,
                                              shortest_path_dp_device,
                                              piecewise_linear_apx_furthest_scan_device,
+                                             piecewise_linear_apx_beam_search_device,
                                              modified_imai_iri_device)
 
 GLOBAL_XVALS = np.asarray(x_values, dtype=np.float64)
@@ -184,8 +185,8 @@ def cuda_worker_chunk(x_vals, y_vals, trans_xs, eps, base, start, end,
     q_opt = cuda.local.array(Q_CAP, dtype=float64)
     n_piv = m_plus_1
 
-    count_alg = piecewise_linear_apx_furthest_scan_device(points_x, points_y, n_piv, eps,
-                                           out_alg_x, out_alg_y, MAX_OUT)
+    count_alg = piecewise_linear_apx_beam_search_device(points_x, points_y, n_piv, eps,
+                                           out_alg_x, out_alg_y, MAX_OUT, 10) # beam width = 10
 
     count_opt = approx_pc_linear_fx_device(points_x, points_y, n_piv, eps,
                                            out_opt_x, out_opt_y, MAX_OUT,
@@ -265,7 +266,7 @@ def test_algorithm(max_workers=None, chunk_size=500000,show_progress=True):
 
     tested = epsilon_fail = optimality_fail = total_fail = 0
     total_theoretical = count_total_cases(len(x_values), len(y_values), len(epsilon_values), pieces_range)
-    print(f"Theoretical total test cases (full grid): {total_theoretical:,}")
+    print(f"Theoretical total test cases: {total_theoretical:,}")
 
     def task_generator():
         for m in pieces_range:

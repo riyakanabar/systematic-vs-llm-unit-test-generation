@@ -793,7 +793,157 @@ def piecewise_linear_apx_furthest_scan_device(points_x, points_y, n, eps,
     return out_count
 
 
+# ---------- helper: furthest reach for one start ----------
+@cuda.jit(device=True)
+def _furthest_reach_dev(xs, ys, n, start, eps,
+                        out_indices, out_count_ptr, max_count):
+    """
+    Write feasible end indices (>start) to out_indices; store count in out_count_ptr[0].
+    """
+    smin = -math.inf
+    smax =  math.inf
+    x0 = xs[start]
+    y0 = ys[start]
+    cnt = 0
+    for j in range(start + 1, n):
+        smin, smax, ok = _update_slope_interval_dev(x0, y0, xs[j], ys[j], eps, smin, smax)
+        if ok == 0:
+            break
+        if cnt < max_count:
+            out_indices[cnt] = j
+            cnt += 1
+        else:
+            break
+    out_count_ptr[0] = cnt
 
 
+# ---------- main: beam-search approximation ----------
+@cuda.jit(device=True)
+def piecewise_linear_apx_beam_search_device(xs, ys, n, eps,
+                                            out_x, out_y, max_out,
+                                            beam_width):
+    """
+    Beam-search piecewise linear approximation (L∞).
+    Returns number of pivot points written to out_x/out_y.
+    """
 
+    # Trivial
+    if n <= 2:
+        m = n if n <= max_out else max_out
+        for i in range(m):
+            out_x[i] = xs[i]
+            out_y[i] = ys[i]
+        return m
+
+    # limited static buffers (beam_width × n max)
+    MAX_N = 64           # adjust if input longer
+    MAX_BEAM = 16        # upper cap for beam
+    # clamp beam width
+    if beam_width > MAX_BEAM:
+        beam_width = MAX_BEAM
+    if n > MAX_N:
+        n = MAX_N
+
+    cost  = cuda.local.array(MAX_BEAM, dtype=float64)
+    index = cuda.local.array(MAX_BEAM, dtype=int32)
+    path_len = cuda.local.array(MAX_BEAM, dtype=int32)
+    paths = cuda.local.array((MAX_BEAM, MAX_N), dtype=int32)
+
+    # init beam with start at 0
+    cost[0] = 0.0
+    index[0] = 0
+    path_len[0] = 1
+    paths[0, 0] = 0
+    beam_count = 1
+
+    # temporary buffers
+    next_cost  = cuda.local.array(MAX_BEAM, dtype=float64)
+    next_index = cuda.local.array(MAX_BEAM, dtype=int32)
+    next_path_len = cuda.local.array(MAX_BEAM, dtype=int32)
+    next_paths = cuda.local.array((MAX_BEAM, MAX_N), dtype=int32)
+    tmp_end = cuda.local.array(MAX_N, dtype=int32)
+    tmp_count = cuda.local.array(1, dtype=int32)
+
+    # main loop
+    while True:
+        new_beam_count = 0
+        reached_end = 0
+
+        for b in range(beam_count):
+            i = index[b]
+            if i == n - 1:
+                reached_end = 1
+                # copy best path to out
+                plen = path_len[b]
+                for k in range(plen):
+                    out_x[k] = xs[paths[b, k]]
+                    out_y[k] = ys[paths[b, k]]
+                return plen
+
+            # get feasible ends
+            _furthest_reach_dev(xs, ys, n, i, eps, tmp_end, tmp_count, MAX_N)
+            cnt = tmp_count[0]
+
+            for e in range(cnt):
+                j = tmp_end[e]
+                if new_beam_count >= beam_width:
+                    break
+                new_cost = cost[b] + 1.0
+                heuristic = (n - j - 1) / (n / 5.0)
+                total_cost = new_cost + heuristic
+
+                next_cost[new_beam_count] = total_cost
+                next_index[new_beam_count] = j
+                plen = path_len[b]
+                next_path_len[new_beam_count] = plen + 1
+                for t in range(plen):
+                    next_paths[new_beam_count, t] = paths[b, t]
+                next_paths[new_beam_count, plen] = j
+                new_beam_count += 1
+
+        if new_beam_count == 0:
+            break
+
+        # partial selection of top-beam_width (simple linear pick)
+        # find smallest costs
+        for i in range(min(new_beam_count, beam_width)):
+            best = i
+            for j in range(i + 1, new_beam_count):
+                if next_cost[j] < next_cost[best]:
+                    best = j
+            # swap
+            tmpc = next_cost[i]; next_cost[i] = next_cost[best]; next_cost[best] = tmpc
+            tmpi = next_index[i]; next_index[i] = next_index[best]; next_index[best] = tmpi
+            tmplen = next_path_len[i]; next_path_len[i] = next_path_len[best]; next_path_len[best] = tmplen
+            for k in range(next_path_len[i]):
+                tmpv = next_paths[i, k]
+                next_paths[i, k] = next_paths[best, k]
+                next_paths[best, k] = tmpv
+
+        beam_count = min(new_beam_count, beam_width)
+        for b in range(beam_count):
+            cost[b] = next_cost[b]
+            index[b] = next_index[b]
+            path_len[b] = next_path_len[b]
+            for k in range(path_len[b]):
+                paths[b, k] = next_paths[b, k]
+
+    # fallback: take best beam closest to end
+    best_idx = 0
+    best_gap = n
+    for b in range(beam_count):
+        gap = abs(index[b] - (n - 1))
+        if gap < best_gap:
+            best_gap = gap
+            best_idx = b
+
+    plen = path_len[best_idx]
+    for k in range(plen):
+        out_x[k] = xs[paths[best_idx, k]]
+        out_y[k] = ys[paths[best_idx, k]]
+    if paths[best_idx, plen - 1] != n - 1 and plen < max_out:
+        out_x[plen] = xs[n - 1]
+        out_y[plen] = ys[n - 1]
+        plen += 1
+    return plen
 
