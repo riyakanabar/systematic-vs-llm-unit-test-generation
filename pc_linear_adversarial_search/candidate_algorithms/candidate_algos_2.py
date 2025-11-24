@@ -4,16 +4,16 @@ from scipy.optimize import linprog
 import heapq
 Point = Tuple[float, float]
 
-def _y_on_line(x, x1, y1, x2, y2):
+def y_on_line(x, x1, y1, x2, y2):
     t = (x - x1) / (x2 - x1)
     return y1 + t * (y2 - y1)
-def _feasible_fixed_endpoints(pts: List[Point], i: int, j: int, eps: float) -> bool:
+def feasible_fixed_endpoints(pts: List[Point], i: int, j: int, eps: float) -> bool:
     x1, y1 = pts[i]; x2, y2 = pts[j]
     if x2 == x1:  # should not happen with strictly increasing x
         return False
     for k in range(i + 1, j):
         xk, yk = pts[k]
-        yhat = _y_on_line(xk, x1, y1, x2, y2)
+        yhat = y_on_line(xk, x1, y1, x2, y2)
         if abs(yk - yhat) > eps:
             return False
     return True
@@ -24,7 +24,7 @@ def shortest_path_dp(pc_linear_fx: List[Point], epsilon: float):
     nexts = [[] for _ in range(n + 1)]
     for i in range(n):
         j = i + 1
-        while j <= n and _feasible_fixed_endpoints(pts, i, j, epsilon):
+        while j <= n and feasible_fixed_endpoints(pts, i, j, epsilon):
             nexts[i].append(j)
             j += 1
 
@@ -267,7 +267,7 @@ def fixed_knot_LP(pc_linear_fx, epsilon):
 
     return optimal_pc_linear_fx, optimal_num_pieces, given_num_pieces
 
-def _update_slope_interval(
+def update_slope_interval(
     x0: float, y0: float, xi: float, yi: float, eps: float,
     smin: float, smax: float
 ) -> Tuple[float, float, bool]:
@@ -319,7 +319,7 @@ def piecewise_linear_apx_furthest_scan(
 
         # Grow j while feasible
         while j < n:
-            smin, smax, ok = _update_slope_interval(xs[i], ys[i], xs[j], ys[j], epsilon, smin, smax)
+            smin, smax, ok = update_slope_interval(xs[i], ys[i], xs[j], ys[j], epsilon, smin, smax)
             if not ok:
                 break
             last_ok = j
@@ -337,14 +337,14 @@ def piecewise_linear_apx_furthest_scan(
 
 
 
-def _furthest_reach(xs, ys, start, eps):
+def furthest_reach(xs, ys, start, eps):
     """Return all feasible end indices > start for one segment."""
     smin, smax = float("-inf"), float("inf")
     x0, y0 = xs[start], ys[start]
     n = len(xs)
     ends = []
     for j in range(start + 1, n):
-        smin, smax, ok = _update_slope_interval(x0, y0, xs[j], ys[j], eps, smin, smax)
+        smin, smax, ok = update_slope_interval(x0, y0, xs[j], ys[j], eps, smin, smax)
         if not ok:
             break
         ends.append(j)
@@ -379,7 +379,7 @@ def piecewise_linear_apx_beam_search(
                 # Reached end
                 return [pc_linear_fx[idx] for idx in path], len(path) - 1, n - 1
 
-            feasible_ends = _furthest_reach(xs, ys, i, epsilon)
+            feasible_ends = furthest_reach(xs, ys, i, epsilon)
             for j in feasible_ends:
                 new_cost = cost + 1
                 # Heuristic: optimistic segments remaining (approx n-j over avg span)
@@ -402,7 +402,7 @@ def piecewise_linear_apx_beam_search(
 
 
 
-def _triangle_area(p1, p2, p3):
+def triangle_area(p1, p2, p3):
     return abs((p1[0]*(p2[1]-p3[1]) +
                 p2[0]*(p3[1]-p1[1]) +
                 p3[0]*(p1[1]-p2[1])) / 2.0)
@@ -423,7 +423,7 @@ def piecewise_linear_apx_visvalingam(
     areas = [float('inf')] * n
     heap = []
     for i in range(1, n - 1):
-        a = _triangle_area(pc_linear_fx[i - 1], pc_linear_fx[i], pc_linear_fx[i + 1])
+        a = triangle_area(pc_linear_fx[i - 1], pc_linear_fx[i], pc_linear_fx[i + 1])
         areas[i] = a
         heapq.heappush(heap, (a, i))
 
@@ -440,7 +440,7 @@ def piecewise_linear_apx_visvalingam(
             # Update neighbor triangles
             for j in [i - 1, i + 1]:
                 if 0 < j < n - 1 and not removed[j]:
-                    new_a = _triangle_area(pc_linear_fx[j - 1], pc_linear_fx[j], pc_linear_fx[j + 1])
+                    new_a = triangle_area(pc_linear_fx[j - 1], pc_linear_fx[j], pc_linear_fx[j + 1])
                     areas[j] = new_a
                     heapq.heappush(heap, (new_a, j))
         else:

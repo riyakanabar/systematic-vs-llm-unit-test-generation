@@ -1,6 +1,3 @@
-from grid_search.get_variants import variant_function, loop_variations
-import functools
-import operator
 import numpy as np
 from math import inf
 from typing import List, Tuple
@@ -167,7 +164,6 @@ def binary_split(pc_fx, epsilon):
     out.append([X[-1], float('inf')])
     return out, len(out)-1, n
 
-#TOL = 1e-12
 def beam_search(pc_fx, epsilon, beam_size=8):
     X, Y, n = extract_XY(pc_fx)
 
@@ -281,12 +277,12 @@ def recursive_split2(pc_fx, epsilon):
 
 Piece = Tuple[float, float]  # (x_i, y_i) for the i-th true piece (left endpoint, value)
 
-def _extract_pieces(pc_fx: List[Tuple[float, float]]) -> List[Piece]:
+def extract_pieces(pc_fx: List[Tuple[float, float]]) -> List[Piece]:
     """Remove boundary sentinels and return [(x1,y1),...,(xn,yn)]."""
     assert len(pc_fx) >= 3, "pc_fx must have at least (-inf,inf), one piece, and (x_{n+1}, inf)"
     return pc_fx[1:-1]
 
-def _to_output(pieces: List[Piece], x_right: float) -> List[Tuple[float, float]]:
+def to_output(pieces: List[Piece], x_right: float) -> List[Tuple[float, float]]:
     """Convert back to sentinel format [(-inf,inf), (x1,y1),...,(xm,ym), (x_{m+1}, inf)]."""
     if not pieces:
         # Degenerate case: no pieces -> return a single dummy piece at -inf (rare in practice)
@@ -297,7 +293,7 @@ def _to_output(pieces: List[Piece], x_right: float) -> List[Tuple[float, float]]
     return out
 
 
-def _count_original_pieces(pc_fx: List[Tuple[float, float]]) -> int:
+def count_original_pieces(pc_fx: List[Tuple[float, float]]) -> int:
     return max(0, len(pc_fx) - 2)
 
 # ========== 6) Bottom-Up Agglomerative by Smallest Y-Spread ==========
@@ -305,7 +301,7 @@ def _count_original_pieces(pc_fx: List[Tuple[float, float]]) -> int:
 #           subject to (max-min) ≤ 2ε (feasible). Stops when no pair can be merged.
 # Complexity: O(n log n) using a heap; updates only near merges.
 def agglomerative_yspread(pc_fx: List[Tuple[float, float]], eps: float):
-    pieces = _extract_pieces(pc_fx)
+    pieces = extract_pieces(pc_fx)
     n = len(pieces)
     ys = [y for _, y in pieces]
     alive = [True]*n
@@ -368,7 +364,7 @@ def agglomerative_yspread(pc_fx: List[Tuple[float, float]], eps: float):
         val = (lo + hi) / 2.0
         out.append((x_left, val))
         i = j
-    return _to_output(out, pc_fx[-1][0]), len(out), _count_original_pieces(pc_fx)
+    return to_output(out, pc_fx[-1][0]), len(out), count_original_pieces(pc_fx)
 
 
 # ========== 8) Pruned Dynamic Programming (Feasible-Window) ==========
@@ -377,7 +373,7 @@ def agglomerative_yspread(pc_fx: List[Tuple[float, float]], eps: float):
 #           We prune by stopping leftward expansion once y-range exceeds 2ε (common early-stop).
 # Complexity: O(n^2) worst case, typically much less with pruning.
 def pruned_dp(pc_fx: List[Tuple[float, float]], eps: float):
-    pieces = _extract_pieces(pc_fx)
+    pieces = extract_pieces(pc_fx)
     n = len(pieces)
     INF = 10**9
     dp = [INF]*(n+1)
@@ -412,7 +408,7 @@ def pruned_dp(pc_fx: List[Tuple[float, float]], eps: float):
         out.append((pieces[j][0], val))
         i = j
     out.reverse()
-    return _to_output(out, pc_fx[-1][0]), len(out), _count_original_pieces(pc_fx)
+    return to_output(out, pc_fx[-1][0]), len(out), count_original_pieces(pc_fx)
 
 candidate_algorithms = [recursive_split1, recursive_split2, lookahead_split,
                         agglomerative_yspread, binary_split, beam_search, pruned_dp]

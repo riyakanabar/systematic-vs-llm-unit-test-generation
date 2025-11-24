@@ -193,13 +193,13 @@ def plot_piecewise_linear_approximation(pc_linear_fx, optimal_pc_linear_fx, epsi
                      y_values + epsilon,
                      color='lightgray',
                      alpha=0.5,
-                     label=f'Error bounds (±{epsilon})')
+                     label=f'±ε Tolerance bands')
 
     # Plot the optimal approximation
     if optimal_pc_linear_fx is not None:
         opt_x = [p[0] for p in optimal_pc_linear_fx]
         opt_y = [p[1] for p in optimal_pc_linear_fx]
-        plt.plot(opt_x, opt_y, '-o', label="Optimal approximation", color='red', linewidth=2, markersize=6)
+        plt.plot(opt_x, opt_y, '-o', label="Approximated function", color='red', linewidth=2, markersize=6)
 
     # Add plot decorations
     plt.title(f"Piecewise Linear Approximation (ε={epsilon})", fontsize=14)

@@ -45,22 +45,22 @@ def approximate_pc_shortest_path(pc_fx, epsilon):
 
     i = 0  # Start at the first segment
     while i < n:
-        U_max, L_min = float('inf'), -float('inf')
+        U_min, L_max = float('inf'), -float('inf')
         k = i + 1 # next segment
 
         # Find the furthest reachable segment satisfying conditions
         while k <= n:
-            new_U_max = min(U_max, U[k - 1])
-            new_L_min = max(L_min, L[k - 1])
+            new_U_min = min(U_min, U[k - 1])
+            new_L_max = max(L_max, L[k - 1])
 
-            if new_U_max >= new_L_min and U[i] >= new_L_min and L[i] <= new_U_max:
-                U_max = new_U_max
-                L_min = new_L_min
+            if new_U_min >= new_L_max and U[i] >= new_L_max and L[i] <= new_U_min:
+                U_min = new_U_min
+                L_max = new_L_max
                 k += 1
             else:
                 break
 
-        segment_value = (U_max + L_min) / 2
+        segment_value = (U_min + L_max) / 2
         optimal_pc_fx.append([pc_fx[i + 1][0], segment_value])
         i = k - 1  # Move to next segment
 
@@ -72,12 +72,23 @@ def approximate_pc_shortest_path(pc_fx, epsilon):
 
     return optimal_pc_fx, optimal_num_pieces, given_num_pieces
 
-def plot_pc_cons_fx(pc_fx, optimal_pc_fx):
+def plot_pc_cons_fx(pc_fx, optimal_pc_fx,epsilon):
     plt.figure(figsize=(10, 8))
+
+
+
     for i in range(1, len(pc_fx) - 1):
         x_start = pc_fx[i][0]
         x_end = pc_fx[i + 1][0]
         y_value = pc_fx[i][1]
+        # plot tolerance band for this segment
+        plt.fill_between(
+            [x_start, x_end],
+            [y_value - epsilon, y_value - epsilon],
+            [y_value + epsilon, y_value + epsilon],
+            color='lightgray', alpha=0.4,
+            label='±ε Tolerance Band' if i == 1 else ""
+        )
         plt.hlines(y_value, x_start, x_end, colors='blue', linewidth=2, alpha=0.7,
                    label='Given Function' if i == 1 else "")
 
@@ -86,12 +97,13 @@ def plot_pc_cons_fx(pc_fx, optimal_pc_fx):
         x_end = optimal_pc_fx[i + 1][0]
         y_value = optimal_pc_fx[i][1]
         plt.hlines(y_value, x_start, x_end, colors='red', linestyles='dashed', linewidth=2, alpha=0.7,
-                   label='Optimized Function' if i == 0 else "")
+                   label='Approximated Function' if i == 0 else "")
 
     plt.xlabel('x')
     plt.ylabel('f(x)')
-    plt.title('Comparison of Given and Optimized Piecewise Constant Functions')
-    plt.legend(loc='lower right', bbox_to_anchor=(1.1, -0.12))  # Moves legend outside
+    plt.title(f"Piecewise Constant Approximation (ε={epsilon})", fontsize=14)
+    # plt.title('Comparison of Given and Optimized Piecewise Constant Functions')
+    plt.legend(loc='best', bbox_to_anchor=(1.1, -0.12))  # Moves legend outside
     plt.grid(True)
     plt.margins(x=0)
     plt.show()
