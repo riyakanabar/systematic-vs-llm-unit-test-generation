@@ -10,9 +10,9 @@ from optimal_algorithms.pc_linear_apx import approximate_pc_linear_fx as optimal
 from pc_linear_adversarial_search.cpu_parallel import is_within_epsilon
 
 SAMPLES = 30
-TESTCASES_PER_SAMPLE = 10
+TESTCASES_PER_SAMPLE = 20
 TOTAL_TESTCASES = SAMPLES * TESTCASES_PER_SAMPLE
-TESTCASE_FILE = "claude.py"
+TESTCASE_FILE = "gemini_iter3.py"
 
 # ---------------------------
 # Validation & duplicates
