@@ -9,10 +9,10 @@ from pc_linear_adversarial_search.candidate_algorithms.candidates import candida
 from optimal_algorithms.pc_linear_apx import approximate_pc_linear_fx as optimal_algorithm
 from pc_linear_adversarial_search.cpu_parallel import is_within_epsilon
 
-SAMPLES = 30
-TESTCASES_PER_SAMPLE = 20
-TOTAL_TESTCASES = SAMPLES * TESTCASES_PER_SAMPLE
-TESTCASE_FILE = "gemini_iter3.py"
+SAMPLE_SIZE = 30 #independent trials
+BATCH_SIZE = 10 #testcases per generation
+TOTAL_TESTCASES = SAMPLE_SIZE * BATCH_SIZE
+TESTCASE_FILE = "chatgpt5_free.py"
 
 # ---------------------------
 # Validation & duplicates
@@ -96,7 +96,7 @@ def testcase_key(tc):
 def load_batches(filepath):
     g = runpy.run_path(filepath)
     batches = []
-    for i in range(1, SAMPLES + 1):
+    for i in range(1, SAMPLE_SIZE + 1):
         key = f"test_cases{i}"
         if key in g:
             batches.append(g[key])
