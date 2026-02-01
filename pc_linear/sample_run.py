@@ -3,8 +3,8 @@ from test_cases import test_cases
 from pc_linear_adversarial_search.cpu_parallel import is_within_epsilon
 from pc_linear_adversarial_search.candidate_algorithms.free_knot_LP import free_knot_LP
 
-pc_linear_fx = [(0.0, 0.0), (1.0, 1.0), (2.0, 2.0), (3.0, 3.0)]#18,19 good ones to test
-epsilon = 0.0
+pc_linear_fx = test_cases[0][0]
+epsilon = test_cases[0][1]
 
 optimal_pc_linear_fx, optimal_num_pieces, given_num_pieces = approximate_pc_linear_fx(pc_linear_fx, epsilon)
 print(pc_linear_fx)

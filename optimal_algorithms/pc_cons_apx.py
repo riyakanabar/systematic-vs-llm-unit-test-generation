@@ -74,9 +74,6 @@ def approximate_pc_shortest_path(pc_fx, epsilon):
 
 def plot_pc_cons_fx(pc_fx, optimal_pc_fx,epsilon):
     plt.figure(figsize=(10, 8))
-
-
-
     for i in range(1, len(pc_fx) - 1):
         x_start = pc_fx[i][0]
         x_end = pc_fx[i + 1][0]
@@ -99,11 +96,12 @@ def plot_pc_cons_fx(pc_fx, optimal_pc_fx,epsilon):
         plt.hlines(y_value, x_start, x_end, colors='red', linestyles='dashed', linewidth=2, alpha=0.7,
                    label='Approximated Function' if i == 0 else "")
 
-    plt.xlabel('x')
-    plt.ylabel('f(x)')
-    plt.title(f"Piecewise Constant Approximation (ε={epsilon})", fontsize=14)
+    plt.xlabel('x',fontsize=18)
+    plt.ylabel('f(x)',fontsize=18)
+    plt.tick_params(labelsize=18)
+    plt.title(f"Piecewise Constant Approximation (ε={epsilon})", fontsize=18)
     # plt.title('Comparison of Given and Optimized Piecewise Constant Functions')
-    plt.legend(loc='best', bbox_to_anchor=(1.1, -0.12))  # Moves legend outside
+    plt.legend(loc='best',fontsize=16)  # Moves legend outside
     plt.grid(True)
     plt.margins(x=0)
     plt.show()

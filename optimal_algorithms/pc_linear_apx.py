@@ -202,10 +202,83 @@ def plot_piecewise_linear_approximation(pc_linear_fx, optimal_pc_linear_fx, epsi
         plt.plot(opt_x, opt_y, '-o', label="Approximated function", color='red', linewidth=2, markersize=6)
 
     # Add plot decorations
-    plt.title(f"Piecewise Linear Approximation (ε={epsilon})", fontsize=14)
-    plt.xlabel("x", fontsize=12)
-    plt.ylabel("y", fontsize=12)
-    plt.legend(loc='best')
+    plt.title(f"Piecewise Linear Approximation (ε={epsilon})", fontsize=18)
+    plt.xlabel("x", fontsize=18)
+    plt.ylabel("y", fontsize=18)
+    plt.tick_params(labelsize=18)
+    plt.legend(loc='best',fontsize=16)
     plt.grid(True, linestyle='--', alpha=0.7)
+    plt.tight_layout()
+    plt.show()
+
+
+
+def plot_all_piecewise_linear_approximation(pc_linear_fx, epsilon, cand_fx=None, opt_fx=None, apx_num_pieces=None, opt_num_pieces=None, title="Piecewise Linear Approximation (Failed Case)"):
+    """
+    Plots the original piecewise linear function, optional candidate approximation,
+    optional optimal approximation, and error bounds.
+
+    Args:
+        pc_linear_fx (list): List of (x,y) points defining the original piecewise linear function
+        epsilon (float): Error bound used for the approximation
+        cand_fx (list, optional): List of (x,y) points for a candidate approximation
+        opt_fx (list, optional): List of (x,y) points for the optimal approximation
+    """
+    # Reconstruct the original function for plotting
+    y_values = reconstruct_piecewise_function(pc_linear_fx)
+    x_values = np.arange(pc_linear_fx[0][0], pc_linear_fx[0][0] + len(y_values))
+
+    plt.figure(figsize=(12, 6))
+
+    # Original function
+    plt.plot(
+        x_values, y_values,
+        label="Given function",
+        color="blue",
+        linewidth=4
+    )
+
+    # Error bounds
+    plt.fill_between(
+        x_values,
+        y_values - epsilon,
+        y_values + epsilon,
+        color="lightgray",
+        alpha=0.5,
+        label=fr"$\pm \epsilon$ band ($\epsilon={epsilon}$)"
+    )
+
+    # Optimal approximation (if provided)
+    if opt_fx is not None:
+        opt_x = [p[0] for p in opt_fx]
+        opt_y = [p[1] for p in opt_fx]
+        plt.plot(
+            opt_x, opt_y,
+            "-o",
+            color="green",
+            linewidth=2,
+            markersize=6,
+            label=fr"OPT ({opt_num_pieces} segments)"
+        )
+        # Candidate approximation (if provided)
+        if cand_fx is not None:
+            cand_x = [p[0] for p in cand_fx]
+            cand_y = [p[1] for p in cand_fx]
+            plt.plot(
+                cand_x, cand_y,
+                "--o",
+                color="magenta",
+                linewidth=2,
+                markersize=6,
+                label=fr"Candidate ({apx_num_pieces} segments)"
+            )
+
+    # Plot decorations
+    plt.title(title, fontsize=18)
+    plt.xlabel("x", fontsize=18)
+    plt.ylabel("f(x)", fontsize=18)
+    plt.tick_params(labelsize=18)
+    plt.legend(loc="best", fontsize=16)
+    plt.grid(True, linestyle="--", alpha=0.7)
     plt.tight_layout()
     plt.show()

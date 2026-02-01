@@ -8,8 +8,8 @@ def plot_pc_case(pc_fx, epsilon, cand_fx=None, opt_fx=None,
     opt_fx  : optimal output, same format as cand_fx
     epsilon : tolerance value
     """
-    plt.style.use("dark_background")
-    plt.figure(figsize=(10, 6))
+    # plt.style.use("dark_background")
+    plt.figure(figsize=(10, 8))
 
     # --- Given function (blue solid) + ±epsilon band (light gray) ---
     for i in range(1, len(pc_fx) - 1):
@@ -48,10 +48,11 @@ def plot_pc_case(pc_fx, epsilon, cand_fx=None, opt_fx=None,
                        linewidth=2, label="Candidate" if i == 0 else "")
 
     # --- Formatting ---
-    plt.xlabel("x")
-    plt.ylabel("f(x)")
-    plt.title(title)
-    plt.legend(loc="best")
+    plt.xlabel("x", fontsize=18)
+    plt.ylabel("f(x)", fontsize=18)
+    plt.tick_params(labelsize=18)
+    plt.title(title, fontsize=18)
+    plt.legend(loc="best", fontsize=16)
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.show()

@@ -1,11 +1,11 @@
 from optimal_algorithms.pc_cons_apx import approximate_pc_cons_fx, plot_pc_cons_fx, approximate_pc_shortest_path
-#from test_cases import test_cases
-from pc_const_adversarial_search.llms.iteration6 import test_cases
+from test_cases import test_cases
+# from pc_const_adversarial_search.llms.iteration6 import test_cases
 
-pc_cons_fx = test_cases[9]['pc_fx']
-epsilon = test_cases[9]['epsilon']
-# pc_cons_fx = test_cases[3][0]
-# epsilon = test_cases[3][1]
+# pc_cons_fx = test_cases[9]['pc_fx']
+# epsilon = test_cases[9]['epsilon']
+pc_cons_fx = test_cases[3][0]
+epsilon = test_cases[3][1]
 optimal_pc_fx, optimal_num_pieces, given_num_pieces = approximate_pc_shortest_path(pc_cons_fx, epsilon)
 #optimal_pc_fx, optimal_num_pieces, given_num_pieces = variant3(pc_cons_fx, epsilon)
 
@@ -15,4 +15,4 @@ print(f"epsilon: {epsilon}")
 print(f"Optimal function is {optimal_pc_fx}")
 
 print(f"Optimal number of pieces: {optimal_num_pieces}")
-plot_pc_cons_fx(pc_cons_fx, optimal_pc_fx)
+plot_pc_cons_fx(pc_cons_fx, optimal_pc_fx, epsilon)
